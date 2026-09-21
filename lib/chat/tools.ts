@@ -2,6 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { addMonths, currentMonth, invoiceDates, monthEnd, monthStart, todayISO } from '@/lib/dates';
 import { computeInsights } from '@/lib/insights';
+import { getBudgetStatus } from '@/lib/budget';
+import { listTrips, tripStatus } from '@/lib/trips';
 import {
   categoryAverages, createTransaction, expensesByCategory, findAccountByName, findCategoryByName, futureCommitments,
   invoiceSummaries, latestAllocation, listAccounts, listCategories, listTransactions, monthTotals, monthlySeries, netWorthSeries,
@@ -71,6 +73,18 @@ export const toolDefinitions: Anthropic.Beta.BetaTool[] = [
     name: 'serie_mensal',
     description: 'Receita e gasto mês a mês nos últimos N meses. Use para tendência e comparação entre meses.',
     input_schema: { type: 'object', properties: { meses: { type: 'integer', description: 'padrão 12' } }, additionalProperties: false },
+    strict: true,
+  },
+  {
+    name: 'orcamento',
+    description: 'Orçamento por percentual da renda: grupos (necessidades, lazer, educação, investimentos...), limite e gasto de cada um no mês, e os alertas ativos.',
+    input_schema: { type: 'object', properties: { mes: { type: 'string', description: 'YYYY-MM. Padrão: mês atual.' } }, additionalProperties: false },
+    strict: true,
+  },
+  {
+    name: 'viagens',
+    description: 'Viagens cadastradas: período, teto de gastos, quanto já foi gasto dentro do teto, ritmo por dia, itens pré-pagos fora do teto e os gastos da viagem.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
     strict: true,
   },
   {
@@ -150,6 +164,27 @@ export async function runTool(name: string, rawInput: unknown): Promise<{ ok: tr
         const { meses } = SerieSchema.parse(rawInput ?? {});
         return { ok: true, result: await monthlySeries(meses ?? 12) };
       }
+      case 'orcamento': {
+        const { mes } = MesSchema.parse(rawInput ?? {});
+        const b = await getBudgetStatus(mes ?? currentMonth());
+        return { ok: true, result: {
+          mes: b.month, base: b.base, origem_da_base: b.baseSource, aviso_a_partir_de: `${Math.round(b.threshold * 100)}%`, soma_percentuais: b.totalPercent,
+          grupos: b.groups.map((g) => ({ grupo: g.group.name, percentual: g.group.percent, mede: g.group.basis === 'investment' ? 'aportes' : 'gastos', categorias: g.categories.map((c) => c.name), limite: g.limit, usado: g.spent, fracao: Math.round(g.pct * 100) / 100, situacao: g.status })),
+          fora_dos_grupos: b.unassigned.spent,
+          alertas: b.alerts.map((a) => `${a.title}: ${a.detail}`),
+        } };
+      }
+      case 'viagens': {
+        const trips = await listTrips();
+        const statuses = await Promise.all(trips.map((t) => tripStatus(t)));
+        return { ok: true, result: statuses.map((s) => ({
+          viagem: s.trip.name, ida: s.trip.start_date, volta: s.trip.end_date, teto: s.trip.budget, fase: s.phase,
+          gasto_no_teto: s.spent, fracao: Math.round(s.pct * 100) / 100, situacao: s.status,
+          dias: { total: s.daysTotal, passados: s.daysElapsed, restantes: s.daysLeft }, por_dia_ate_agora: s.perDaySoFar, por_dia_permitido: s.perDayAllowed,
+          pre_pago_fora_do_teto: s.prepaid,
+          gastos: s.expenses.slice(0, 50).map((t) => ({ data: t.date, descricao: t.description, valor: t.amount, categoria: t.category_name })),
+        })) };
+      }
       case 'investimentos': {
         const [alloc, series] = await Promise.all([latestAllocation(), netWorthSeries()]);
         return { ok: true, result: {
@@ -186,6 +221,8 @@ Como o sistema funciona:
 - Gasto no cartão conta na data da compra e cai na fatura que fecha depois dessa data. Parcelas viram uma linha por fatura.
 - "Transferência" é dinheiro entre contas do próprio usuário (pagamento de fatura, aporte em investimento): nunca é gasto nem receita.
 - O usuário registra gastos no dia a dia e importa o extrato na virada do mês; o sistema concilia os dois.
+- Viagens têm teto próprio: gasto nas datas da viagem (fora categorias fixas) entra no teto e sai dos grupos do orçamento mensal; pré-pago (passagem etc.) fica fora do teto. Use a ferramenta viagens.
+- Há um orçamento por percentual da renda (grupos como necessidades, lazer, educação, investimentos). Use a ferramenta orcamento para perguntas sobre limite, meta ou "posso gastar".
 
 Contas cadastradas:
 ${accountLines || '- nenhuma'}

@@ -22,6 +22,25 @@ export type Category = {
   kind: 'expense' | 'income';
   icon: string | null;
   budget: number | null;
+  group_id: number | null;
+  fixed: boolean;
+};
+
+export type Trip = {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  budget: number;
+  notes: string | null;
+};
+
+export type BudgetGroup = {
+  id: number;
+  name: string;
+  percent: number;
+  basis: 'expense' | 'investment';
+  sort: number;
 };
 
 export type Rule = {
@@ -50,6 +69,9 @@ export type Transaction = {
   installment_n: number | null;
   installment_total: number | null;
   notes: string | null;
+  trip_id: number | null;
+  trip_excluded: boolean;
+  trip_name: string | null;
   account_name: string;
   account_kind: AccountKind;
   category_name: string | null;

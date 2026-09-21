@@ -6,6 +6,10 @@ import {
   listAccounts, listCategories, listTransactions, monthTotals, monthlySeries, latestAllocation,
 } from '@/lib/queries';
 import { computeInsights } from '@/lib/insights';
+import { getBudgetStatus } from '@/lib/budget';
+import { BudgetBars } from '@/components/BudgetBars';
+import { tripsAround, tripStatus } from '@/lib/trips';
+import { TripCard } from '@/components/TripCard';
 import { StatTile } from '@/components/StatTile';
 import { MonthNav } from '@/components/MonthNav';
 import { BarList } from '@/components/charts/BarList';
@@ -18,12 +22,13 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   const month = typeof sp.m === 'string' && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : currentMonth();
   const prevMonth = addMonths(month, -1);
 
-  const [totals, prevTotals, byCat, avg, daily, series, recent, accounts, categories, insights, commitments, invoices, allocation] = await Promise.all([
+  const [totals, prevTotals, byCat, avg, daily, series, recent, accounts, categories, insights, commitments, invoices, allocation, budget] = await Promise.all([
     monthTotals(month), monthTotals(prevMonth), expensesByCategory(monthStart(month), monthEnd(month)), categoryAverages(month, 3),
     dailyCumulative(month), monthlySeries(12), listTransactions({ month, limit: 8 }), listAccounts(), listCategories(),
-    computeInsights(month), futureCommitments(), invoiceSummaries(), latestAllocation(),
+    computeInsights(month), futureCommitments(), invoiceSummaries(), latestAllocation(), getBudgetStatus(month),
   ]);
 
+  const tripStatuses = await Promise.all((await tripsAround()).map((t) => tripStatus(t)));
   const avgTotal = [...avg.values()].reduce((a, b) => a + b, 0);
   const balance = totals.income - totals.expense;
   const checking = accounts.filter((a) => a.kind === 'checking' && a.balance !== null);
@@ -76,6 +81,24 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         <StatTile label="Receita" value={totals.income} delta={prevTotals.income ? { pct: (totals.income - prevTotals.income) / prevTotals.income, goodWhenDown: false } : null} hint={prevTotals.income ? `${formatMonth(prevMonth)} ${formatBRL(prevTotals.income)}` : undefined} />
         <StatTile label="Resultado" value={balance} tone={balance < 0 ? 'bad' : 'good'} hint={totals.income ? `${Math.round((balance / totals.income) * 100)}% da receita` : 'sem receita registrada'} />
         <StatTile label="Faturas abertas" value={openTotal} hint={openInvoices.length ? openInvoices.map((i) => `${i.card.name} vence ${formatDate(i.due).slice(0, 5)}`).join(' · ') : 'nenhum cartão'} />
+      </section>
+
+      {tripStatuses.length ? (
+        <section className="card p-4 flex flex-col gap-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Viagem</h2>
+            <Link href="/viagens" className="text-[13px] text-accent">ver</Link>
+          </div>
+          {tripStatuses.map((s) => <TripCard key={s.trip.id} s={s} />)}
+        </section>
+      ) : null}
+
+      <section id="orcamento" className="card p-4 flex flex-col gap-3 scroll-mt-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-semibold">Orçamento <span className="text-ink-3 font-normal text-[13px]">por percentual da renda</span></h2>
+          <Link href="/config#orcamento" className="text-[13px] text-accent">configurar</Link>
+        </div>
+        <BudgetBars status={budget} />
       </section>
 
       {insights.length ? (

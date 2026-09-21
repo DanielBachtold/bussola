@@ -97,7 +97,7 @@ export function CategoriesPanel({ categories }: { categories: Category[] }) {
           <ul className="flex flex-wrap gap-2">
             {categories.filter((c) => c.kind === k).map((c) => (
               <li key={c.id} className="pill !py-1 !px-2.5 !text-[13px] gap-2">
-                <button onClick={() => setEditing(c)}>{c.icon ? `${c.icon} ` : ''}{c.name}{c.budget ? <span className="text-ink-3"> · {formatBRL(c.budget)}</span> : null}</button>
+                <button onClick={() => setEditing(c)}>{c.icon ? `${c.icon} ` : ''}{c.name}{c.fixed ? <span className="text-ink-3" title="conta fixa"> · fixa</span> : null}{c.budget ? <span className="text-ink-3"> · {formatBRL(c.budget)}</span> : null}</button>
                 <button className="text-ink-3 hover:text-bad" disabled={pending} aria-label="Excluir" onClick={() => { if (confirm(`Excluir "${c.name}"? Os lançamentos ficam sem categoria.`)) start(async () => { await deleteCategory(c.id); }); }}>×</button>
               </li>
             ))}
@@ -132,6 +132,10 @@ function CategoryForm({ category, close }: { category: Category | null; close: (
       </label>
       <label className="flex flex-col gap-1 text-ink-3 col-span-2">Orçamento mensal (opcional)
         <input name="budget" className="input tabular" inputMode="decimal" defaultValue={category?.budget ?? ''} placeholder="ex.: 800" />
+      </label>
+      <label className="flex items-center gap-2 text-ink-2 col-span-2">
+        <input type="checkbox" name="fixed" defaultChecked={category?.fixed ?? false} />
+        Conta fixa: continua vindo mesmo em viagem (financiamento, faculdade, aluguel). Não entra no teto de viagens.
       </label>
       {state?.error ? <p className="col-span-2 md:col-span-4 text-bad">{state.error}</p> : null}
       <div className="col-span-2 md:col-span-4 flex gap-2">

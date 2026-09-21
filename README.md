@@ -9,8 +9,11 @@ Sistema de finanças pessoais para quem quer saber onde o dinheiro está indo se
 - **Cartão de crédito de verdade**: dia de fechamento e vencimento por cartão, compra cai na fatura certa, parcelas viram uma linha por fatura, pagamento de fatura é transferência (não gasto), e o painel mostra quanto já está comprometido nos meses seguintes.
 - **Categorização que aprende**: ao categorizar uma linha do extrato, o sistema salva o padrão e categoriza sozinho da próxima vez.
 - **Painel com gráficos e insights** calculados em código: projeção do mês, categoria que mais subiu, gastos recorrentes, orçamento estourado, fatura vencendo, taxa de poupança.
+- **Orçamento por percentual da renda**: grupos como Necessidades 40%, Lazer 15%, Educação 15%, Investimentos 30% (você define), cada categoria ligada a um grupo. Alerta dentro do app quando um grupo chega perto do limite e quando passa. Investimentos funciona como meta de aporte.
+- **Viagens**: um período com teto próprio. O que você gasta nas datas da viagem entra no teto sozinho (fora as categorias fixas, como aluguel e faculdade) e sai dos grupos do orçamento mensal; passagem e o que foi pago antes entram como pré-pago, fora do teto. Mostra quanto dá pra gastar por dia até a volta.
 - **Investimentos**: registro mensal de posição por ativo, evolução do patrimônio contra aportes acumulados, alocação por ativo e classe.
-- **Chat com IA (opcional)**: se você definir `ANTHROPIC_API_KEY`, aparece um chat que responde perguntas consultando o seu banco de dados via ferramentas (nunca inventa número) e registra lançamentos por conversa. Sem a chave, o sistema funciona 100% e o chat nem aparece. A API da Anthropic é paga por uso.
+- **Chat**: funciona em dois modos. Sem chave de IA, entende um conjunto de perguntas frequentes sobre os números e sobre o sistema ("quanto gastei com uber em agosto", "qual a fatura aberta", "como funciona a conciliação") e responde direto do banco, sem custo. Com `ANTHROPIC_API_KEY`, usa o Claude com ferramentas: responde qualquer pergunta consultando seus dados (nunca inventa número) e registra lançamentos por conversa. A API da Anthropic é paga por uso.
+- **Tema claro, escuro ou automático**, salvo no navegador.
 
 ## Stack
 
@@ -62,7 +65,7 @@ Abra http://localhost:3000 e entre com a senha de `APP_PASSWORD`.
 ## Estrutura
 
 ```
-app/(app)/        páginas autenticadas (painel, lançar, extrato, faturas, revisar, importar, investimentos, config, chat)
+app/(app)/        páginas autenticadas (painel, lançar, extrato, faturas, revisar, viagens, importar, investimentos, config, chat)
 app/actions/      server actions (auth, transações, config, importação, investimentos)
 app/api/chat/     rota de streaming do chat (só com ANTHROPIC_API_KEY)
 lib/ofx.ts        parser de OFX 1.x e 2.x tolerante a banco brasileiro
@@ -70,8 +73,11 @@ lib/csv.ts        parser de CSV com detecção de colunas
 lib/reconcile.ts  prévia e gravação da importação, conciliação por valor + data
 lib/quickparse.ts interpretador da barra rápida (sem IA)
 lib/insights.ts   insights calculados
+lib/budget.ts     orçamento por percentual e alertas
+lib/trips.ts      viagens com teto próprio
 lib/queries.ts    acesso a dados
-lib/chat/tools.ts ferramentas que o modelo usa no chat
+lib/chat/local.ts chat sem IA (perguntas frequentes)
+lib/chat/tools.ts ferramentas que o modelo usa no chat com IA
 scripts/          migrate, seed:demo, db:local (PGlite), make-icons
 ```
 

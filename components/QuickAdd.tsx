@@ -4,13 +4,14 @@ import { useMemo, useState, useTransition } from 'react';
 import { quickParse } from '@/lib/quickparse';
 import { formatBRL } from '@/lib/money';
 import { formatDate } from '@/lib/dates';
-import type { Account, Category, Rule } from '@/lib/types';
+import type { Account, Category, Rule, Trip } from '@/lib/types';
 import { quickAdd } from '@/app/actions/transactions';
 
-export function QuickAdd({ accounts, categories, rules }: { accounts: Account[]; categories: Category[]; rules: Rule[] }) {
+export function QuickAdd({ accounts, categories, rules, trips = [] }: { accounts: Account[]; categories: Category[]; rules: Rule[]; trips?: Trip[] }) {
   const [text, setText] = useState('');
   const [accountId, setAccountId] = useState<number | ''>('');
   const [categoryId, setCategoryId] = useState<number | '' | null>(null);
+  const [tripChoice, setTripChoice] = useState<boolean | null>(null); // null = padrão
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -18,12 +19,20 @@ export function QuickAdd({ accounts, categories, rules }: { accounts: Account[];
   const effectiveAccount = accountId !== '' ? accounts.find((a) => a.id === accountId) ?? null : parsed?.account ?? null;
   const effectiveCategory = categoryId === null ? parsed?.category ?? null : categoryId === '' ? null : categories.find((c) => c.id === categoryId) ?? null;
   const cats = categories.filter((c) => c.kind === (parsed?.kind === 'income' ? 'income' : 'expense'));
+  // viagem cobrindo a data do gasto: entra por padrão, a não ser que a categoria seja fixa
+  const trip = parsed && parsed.kind === 'expense' ? trips.find((t) => t.start_date <= parsed.date && parsed.date <= t.end_date) ?? null : null;
+  const tripDefault = Boolean(trip && !effectiveCategory?.fixed);
+  const tripOn = trip ? (tripChoice ?? tripDefault) : false;
 
   function submit() {
     if (!parsed || !effectiveAccount) return;
     start(async () => {
-      const res = await quickAdd(text, { accountId: effectiveAccount.id, categoryId: categoryId === null ? undefined : categoryId === '' ? null : categoryId });
-      if (res.ok) { setMsg({ ok: true, text: res.message ?? 'Registrado.' }); setText(''); setAccountId(''); setCategoryId(null); }
+      const res = await quickAdd(text, {
+        accountId: effectiveAccount.id,
+        categoryId: categoryId === null ? undefined : categoryId === '' ? null : categoryId,
+        tripId: trip ? (tripOn ? trip.id : null) : undefined,
+      });
+      if (res.ok) { setMsg({ ok: true, text: res.message ?? 'Registrado.' }); setText(''); setAccountId(''); setCategoryId(null); setTripChoice(null); }
       else setMsg({ ok: false, text: res.error ?? 'Erro.' });
     });
   }
@@ -36,7 +45,7 @@ export function QuickAdd({ accounts, categories, rules }: { accounts: Account[];
           placeholder="almoço 42 crédito rico"
           value={text}
           autoFocus
-          onChange={(e) => { setText(e.target.value); setMsg(null); setCategoryId(null); }}
+          onChange={(e) => { setText(e.target.value); setMsg(null); setCategoryId(null); setTripChoice(null); }}
           enterKeyHint="done"
         />
         <button className="btn btn-primary !px-5" disabled={!parsed || !effectiveAccount || pending}>{pending ? '...' : 'Lançar'}</button>
@@ -75,6 +84,13 @@ export function QuickAdd({ accounts, categories, rules }: { accounts: Account[];
               </label>
             ) : null}
           </div>
+          {trip ? (
+            <label className="flex items-center gap-2 text-[13px] text-ink-2">
+              <input type="checkbox" checked={tripOn} onChange={(e) => setTripChoice(e.target.checked)} />
+              Conta no teto da viagem <span className="font-medium text-ink">{trip.name}</span>
+              {effectiveCategory?.fixed ? <span className="text-ink-3">(categoria fixa, fica fora por padrão)</span> : null}
+            </label>
+          ) : null}
           {parsed.warnings.map((w) => <p key={w} className="text-[13px] text-warn">{w}</p>)}
         </div>
       ) : text.trim() ? (

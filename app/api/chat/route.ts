@@ -2,26 +2,41 @@ import Anthropic from '@anthropic-ai/sdk';
 import { sessionOrNull } from '@/lib/session';
 import { addChatMessage, createChat, getChatMessages } from '@/lib/queries';
 import { buildSystemPrompt, runTool, toolDefinitions } from '@/lib/chat/tools';
+import { answerLocally } from '@/lib/chat/local';
 
 export const maxDuration = 120;
 
 const MODEL = 'claude-opus-5';
 
 /**
- * Chat com ferramentas, em streaming. Só funciona com ANTHROPIC_API_KEY
- * definida; sem ela o sistema esconde o chat e nada aqui é chamado.
+ * Chat em streaming. Com ANTHROPIC_API_KEY, usa o Claude com ferramentas.
+ * Sem a chave, responde pelo modo local (perguntas frequentes, sem custo).
  * Protocolo: NDJSON, uma linha por evento {t: 'text'|'tool'|'done'|'error'}.
  */
 export async function POST(req: Request) {
   if (!(await sessionOrNull())) return new Response('Unauthorized', { status: 401 });
-  if (!process.env.ANTHROPIC_API_KEY) return new Response('Chat desativado: defina ANTHROPIC_API_KEY.', { status: 503 });
 
   const body = (await req.json()) as { chatId?: number; message: string };
   const text = String(body.message ?? '').trim();
   if (!text) return new Response('Mensagem vazia', { status: 400 });
 
-  const client = new Anthropic();
   const chatId = body.chatId ?? (await createChat(null));
+  const encoder = new TextEncoder();
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    await addChatMessage(chatId, 'user', { text }, text);
+    let answer: string;
+    try {
+      answer = await answerLocally(text);
+    } catch (err) {
+      answer = `⚠ Não consegui responder: ${err instanceof Error ? err.message : 'erro'}`;
+    }
+    await addChatMessage(chatId, 'assistant', { text: answer }, answer);
+    const payload = [JSON.stringify({ t: 'text', d: answer }), JSON.stringify({ t: 'done', chatId, mode: 'local' })].join('\n') + '\n';
+    return new Response(encoder.encode(payload), { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' } });
+  }
+
+  const client = new Anthropic();
   const history = await getChatMessages(chatId);
 
   // histórico: só o texto final de cada turno (blocos de ferramenta ficam dentro do turno)
@@ -32,7 +47,6 @@ export async function POST(req: Request) {
   await addChatMessage(chatId, 'user', { text }, text);
 
   const system = await buildSystemPrompt();
-  const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {

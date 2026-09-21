@@ -63,8 +63,9 @@ export async function saveCategory(_prev: ActionState | undefined, formData: For
     const icon = String(formData.get('icon') ?? '').trim() || null;
     const budgetRaw = String(formData.get('budget') ?? '').trim();
     const budget = budgetRaw ? Math.abs(parseAmount(budgetRaw)) : null;
-    if (id) await pool.query(`UPDATE categories SET name=$2, kind=$3, icon=$4, budget=$5 WHERE id=$1`, [id, name, kind, icon, budget]);
-    else await pool.query(`INSERT INTO categories (name, kind, icon, budget) VALUES ($1,$2,$3,$4)`, [name, kind, icon, budget]);
+    const fixed = formData.get('fixed') === 'on';
+    if (id) await pool.query(`UPDATE categories SET name=$2, kind=$3, icon=$4, budget=$5, fixed=$6 WHERE id=$1`, [id, name, kind, icon, budget, fixed]);
+    else await pool.query(`INSERT INTO categories (name, kind, icon, budget, fixed) VALUES ($1,$2,$3,$4,$5)`, [name, kind, icon, budget, fixed]);
     revalidate();
     return { ok: true, message: 'Categoria salva.' };
   } catch (err) {

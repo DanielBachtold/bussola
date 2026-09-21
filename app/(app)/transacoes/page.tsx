@@ -5,6 +5,7 @@ import type { TxKind } from '@/lib/types';
 import { MonthNav } from '@/components/MonthNav';
 import { TxList } from '@/components/TxList';
 import { Filters } from './Filters';
+import { listTrips } from '@/lib/trips';
 
 export const metadata = { title: 'Extrato' };
 
@@ -17,9 +18,9 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
   const kind = (['expense', 'income', 'transfer'].includes(str('k')) ? str('k') : undefined) as TxKind | undefined;
   const search = str('q') || undefined;
 
-  const [items, accounts, categories] = await Promise.all([
+  const [items, accounts, categories, trips] = await Promise.all([
     listTransactions({ start: monthStart(month), end: monthEnd(month), accountId, categoryId, kind, search, limit: 1000 }),
-    listAccounts(), listCategories(),
+    listAccounts(), listCategories(), listTrips(),
   ]);
   const expense = items.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
   const income = items.filter((t) => t.kind === 'income').reduce((a, t) => a + t.amount, 0);
@@ -36,7 +37,7 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
       </header>
       <Filters accounts={accounts} categories={categories} month={month} values={{ a: accountId, c: categoryId, k: kind, q: search }} />
       <section className="card px-4 py-2">
-        <TxList items={items} categories={categories} />
+        <TxList items={items} categories={categories} trips={trips} />
       </section>
     </div>
   );

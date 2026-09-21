@@ -26,6 +26,7 @@
   --seq-1: #cde2fb; --seq-2: #86b6ef; --seq-3: #3987e5; --seq-4: #1c5cab;
 }
 
+/* Escuro: pelo sistema (sem escolha explícita) ou pela escolha do usuário (data-theme). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -50,7 +51,33 @@
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
     --seq-1: #184f95; --seq-2: #256abf; --seq-3: #5598e7; --seq-4: #9ec5f4;
+  
   }
+}
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #222220;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --accent: #3987e5;
+    --accent-ink: #ffffff;
+    --good: #0ca30c;
+    --good-bg: #10240f;
+    --warn: #fab219;
+    --warn-bg: #2b2208;
+    --bad: #e66767;
+    --bad-bg: #2d1414;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --seq-1: #184f95; --seq-2: #256abf; --seq-3: #5598e7; --seq-4: #9ec5f4;
+  
 }
 
 @theme inline {

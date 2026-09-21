@@ -3,19 +3,20 @@
 import { useState, useTransition } from 'react';
 import { formatBRL } from '@/lib/money';
 import { formatDateShort, formatMonth } from '@/lib/dates';
-import type { Category, Transaction, TxKind } from '@/lib/types';
+import type { Category, Transaction, Trip, TxKind } from '@/lib/types';
 import { editTransaction, removeTransaction, setCategory, setKind } from '@/app/actions/transactions';
+import { setTransactionTrip } from '@/app/actions/trips';
 
-export function TxList({ items, categories, compact = false, emptyText = 'Nenhum lançamento.' }: { items: Transaction[]; categories: Category[]; compact?: boolean; emptyText?: string }) {
+export function TxList({ items, categories, trips, compact = false, emptyText = 'Nenhum lançamento.' }: { items: Transaction[]; categories: Category[]; trips?: Trip[]; compact?: boolean; emptyText?: string }) {
   if (!items.length) return <p className="text-sm text-ink-3 py-6 text-center">{emptyText}</p>;
   return (
     <ul className="flex flex-col">
-      {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} compact={compact} />)}
+      {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} />)}
     </ul>
   );
 }
 
-function TxRow({ tx, categories, compact }: { tx: Transaction; categories: Category[]; compact: boolean }) {
+function TxRow({ tx, categories, trips, compact }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const negative = tx.amount < 0;
@@ -35,6 +36,7 @@ function TxRow({ tx, categories, compact }: { tx: Transaction; categories: Categ
             {!compact && tx.category_name ? ` · ${tx.category_name}` : ''}
             {tx.kind === 'transfer' ? ' · transferência' : ''}
             {tx.invoice_month ? ` · fatura ${formatMonth(tx.invoice_month)}` : ''}
+            {tx.trip_name ? ` · ✈ ${tx.trip_name}${tx.trip_excluded ? ' (fora do teto)' : ''}` : ''}
           </span>
         </span>
         <span className="flex flex-col items-end shrink-0">
@@ -42,12 +44,12 @@ function TxRow({ tx, categories, compact }: { tx: Transaction; categories: Categ
           {status ? <span className={`pill !text-[10px] ${status === 'revisar' ? 'pill-warn' : status === 'conciliado' ? 'pill-good' : ''}`}>{status}</span> : null}
         </span>
       </button>
-      {open ? <TxEditor tx={tx} categories={categories} pending={pending} start={start} close={() => setOpen(false)} /> : null}
+      {open ? <TxEditor tx={tx} categories={categories} trips={trips} pending={pending} start={start} close={() => setOpen(false)} /> : null}
     </li>
   );
 }
 
-function TxEditor({ tx, categories, pending, start, close }: { tx: Transaction; categories: Category[]; pending: boolean; start: (fn: () => Promise<void> | void) => void; close: () => void }) {
+function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transaction; categories: Category[]; trips?: Trip[]; pending: boolean; start: (fn: () => Promise<void> | void) => void; close: () => void }) {
   const [desc, setDesc] = useState(tx.description);
   const [amount, setAmount] = useState(String(Math.abs(tx.amount)).replace('.', ','));
   const [date, setDate] = useState(tx.date);
@@ -101,6 +103,20 @@ function TxEditor({ tx, categories, pending, start, close }: { tx: Transaction; 
           </label>
         ) : null}
       </div>
+      {trips?.length && tx.kind === 'expense' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-ink-3">Viagem</span>
+          <select className="input !w-auto !py-1.5" value={tx.trip_id ?? ''} disabled={pending} onChange={(e) => start(async () => { await setTransactionTrip(tx.id, e.target.value ? Number(e.target.value) : null, tx.trip_excluded); })}>
+            <option value="">Nenhuma</option>
+            {trips.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          {tx.trip_id ? (
+            <label className="flex items-center gap-1.5 text-ink-2">
+              <input type="checkbox" checked={tx.trip_excluded} disabled={pending} onChange={(e) => start(async () => { await setTransactionTrip(tx.id, tx.trip_id, e.target.checked); })} /> fora do teto (pré-pago)
+            </label>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2 justify-between">
         <div className="flex gap-2">
           <button

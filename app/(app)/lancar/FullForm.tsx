@@ -3,9 +3,9 @@
 import { useActionState, useState } from 'react';
 import { addTransaction } from '@/app/actions/transactions';
 import { todayISO } from '@/lib/dates';
-import type { Account, Category, TxKind } from '@/lib/types';
+import type { Account, Category, Trip, TxKind } from '@/lib/types';
 
-export function FullForm({ accounts, categories }: { accounts: Account[]; categories: Category[] }) {
+export function FullForm({ accounts, categories, trips = [] }: { accounts: Account[]; categories: Category[]; trips?: Trip[] }) {
   const [state, action, pending] = useActionState(addTransaction, undefined);
   const [kind, setKind] = useState<TxKind>('expense');
   const [accountId, setAccountId] = useState<string>(String(accounts[0]?.id ?? ''));
@@ -56,6 +56,16 @@ export function FullForm({ accounts, categories }: { accounts: Account[]; catego
         <label className="flex flex-col gap-1">
           <span className="text-ink-3">Parcelas</span>
           <input name="installments" type="number" min={1} max={48} defaultValue={1} className="input" />
+        </label>
+      ) : null}
+      {trips.length && kind === 'expense' ? (
+        <label className="flex flex-col gap-1 col-span-2">
+          <span className="text-ink-3">Viagem</span>
+          <select name="trip_id" className="input" defaultValue="auto">
+            <option value="auto">Automático (pela data e categoria)</option>
+            <option value="">Nenhuma</option>
+            {trips.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
         </label>
       ) : null}
       <label className="flex flex-col gap-1 col-span-2">

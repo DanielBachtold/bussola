@@ -12,17 +12,29 @@ const TOOL_LABEL: Record<string, string> = {
   faturas: 'olhando as faturas',
   serie_mensal: 'comparando os meses',
   investimentos: 'lendo a posição de investimentos',
+  orcamento: 'conferindo o orçamento',
+  viagens: 'olhando as viagens',
   registrar_lancamento: 'registrando',
 };
 
-const SUGGESTIONS = [
-  'Como está meu mês até agora?',
-  'Quanto gastei com alimentação nos últimos 3 meses?',
-  'Qual vai ser minha próxima fatura e quando vence?',
-  'O que mais subiu em relação à média?',
-];
+const SUGGESTIONS: Record<'ai' | 'local', string[]> = {
+  ai: [
+    'Como está meu mês até agora?',
+    'Quanto gastei com alimentação nos últimos 3 meses?',
+    'Qual vai ser minha próxima fatura e quando vence?',
+    'O que mais subiu em relação à média?',
+  ],
+  local: [
+    'Como está meu mês?',
+    'Quanto gastei com alimentação?',
+    'Onde gastei mais nos últimos 3 meses?',
+    'Qual a fatura aberta e quando vence?',
+    'Como está meu orçamento?',
+    'Como funciona a importação de extrato?',
+  ],
+};
 
-export function ChatView({ chatId, chats, initial }: { chatId: number | null; chats: { id: number; title: string }[]; initial: Msg[] }) {
+export function ChatView({ mode, chatId, chats, initial }: { mode: 'ai' | 'local'; chatId: number | null; chats: { id: number; title: string }[]; initial: Msg[] }) {
   const router = useRouter();
   const [msgs, setMsgs] = useState<Msg[]>(initial);
   const [input, setInput] = useState('');
@@ -52,12 +64,15 @@ export function ChatView({ chatId, chats, initial }: { chatId: number | null; ch
         for (const line of lines) {
           if (!line.trim()) continue;
           const ev = JSON.parse(line);
+          if (ev.t === 'done') {
+            if (!currentId) { setCurrentId(ev.chatId); router.replace(`/chat?c=${ev.chatId}`); }
+            continue;
+          }
           setMsgs((m) => {
             const last = { ...m[m.length - 1] };
             if (ev.t === 'text') last.text += ev.d;
             else if (ev.t === 'tool' && ev.status === 'start') last.tools = [...(last.tools ?? []), ev.name];
             else if (ev.t === 'error') last.text += (last.text ? '\n\n' : '') + `⚠ ${ev.message}`;
-            else if (ev.t === 'done' && !currentId) { setCurrentId(ev.chatId); router.replace(`/chat?c=${ev.chatId}`); }
             return [...m.slice(0, -1), last];
           });
         }
@@ -74,7 +89,12 @@ export function ChatView({ chatId, chats, initial }: { chatId: number | null; ch
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Chat</h1>
-          <p className="text-sm text-ink-2">Pergunte sobre seus números. As respostas vêm do seu banco de dados, não de chute.</p>
+          <p className="text-sm text-ink-2">
+            Pergunte sobre seus números ou sobre o sistema.{' '}
+            {mode === 'local'
+              ? <span className="pill" title="Sem chave de IA: responde perguntas frequentes direto do banco, sem custo.">modo local, sem IA</span>
+              : <span className="pill pill-good" title="Com ANTHROPIC_API_KEY: responde qualquer pergunta consultando seus dados.">com IA</span>}
+          </p>
         </div>
         <div className="flex gap-1 items-center">
           <select className="input !w-auto !py-1.5 text-[13px]" value={currentId ?? ''} onChange={(e) => router.push(e.target.value ? `/chat?c=${e.target.value}` : '/chat')}>
@@ -90,7 +110,7 @@ export function ChatView({ chatId, chats, initial }: { chatId: number | null; ch
           <div className="m-auto flex flex-col gap-2 items-center text-center max-w-md">
             <p className="text-ink-2 text-sm">Algumas ideias:</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => <button key={s} className="btn btn-ghost btn-sm" onClick={() => send(s)}>{s}</button>)}
+              {SUGGESTIONS[mode].map((s) => <button key={s} className="btn btn-ghost btn-sm" onClick={() => send(s)}>{s}</button>)}
             </div>
           </div>
         ) : null}

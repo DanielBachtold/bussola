@@ -111,6 +111,33 @@ const statements = [
     display TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS budget_groups (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    percent NUMERIC(5,2) NOT NULL CHECK (percent >= 0 AND percent <= 100),
+    basis TEXT NOT NULL DEFAULT 'expense' CHECK (basis IN ('expense','investment')),
+    sort INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE categories ADD COLUMN IF NOT EXISTS group_id INT REFERENCES budget_groups(id) ON DELETE SET NULL`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS trips (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL CHECK (end_date >= start_date),
+    budget NUMERIC(14,2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS trip_id INT REFERENCES trips(id) ON DELETE SET NULL`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS trip_excluded BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE INDEX IF NOT EXISTS transactions_trip ON transactions(trip_id)`,
+  `ALTER TABLE categories ADD COLUMN IF NOT EXISTS fixed BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE TABLE IF NOT EXISTS insights (
     id SERIAL PRIMARY KEY,
     month DATE NOT NULL UNIQUE,
@@ -152,6 +179,14 @@ const defaultTransferRules = [
   'transferência entre contas',
 ];
 
+// Grupos de orçamento por percentual da renda (o usuário ajusta em Configurações).
+const defaultGroups: Array<[string, number, 'expense' | 'investment', string[]]> = [
+  ['Necessidades básicas', 40, 'expense', ['Moradia', 'Mercado', 'Saúde', 'Transporte', 'Impostos e taxas']],
+  ['Lazer e estilo de vida', 15, 'expense', ['Lazer', 'Alimentação', 'Viagem', 'Assinaturas', 'Compras', 'Pessoal']],
+  ['Educação', 15, 'expense', ['Educação']],
+  ['Investimentos', 30, 'investment', []],
+];
+
 async function main() {
   for (const sql of statements) await pool.query(sql);
 
@@ -165,6 +200,21 @@ async function main() {
     const { rows } = await pool.query(`SELECT 1 FROM category_rules WHERE pattern = $1 AND kind = 'transfer'`, [pattern]);
     if (rows.length === 0) {
       await pool.query(`INSERT INTO category_rules (pattern, kind) VALUES ($1, 'transfer')`, [pattern]);
+    }
+  }
+
+  // categorias "fixas": contas que continuam vindo mesmo em viagem (não entram no teto da viagem)
+  const { rows: fixedFlag } = await pool.query(`SELECT value FROM settings WHERE key = 'fixed_defaults_applied'`);
+  if (!fixedFlag.length) {
+    await pool.query(`UPDATE categories SET fixed = TRUE WHERE name = ANY($1)`, [['Moradia', 'Impostos e taxas', 'Assinaturas', 'Educação']]);
+    await pool.query(`INSERT INTO settings (key, value) VALUES ('fixed_defaults_applied', '1') ON CONFLICT DO NOTHING`);
+  }
+
+  const { rows: groupCount } = await pool.query(`SELECT COUNT(*)::int AS n FROM budget_groups`);
+  if (groupCount[0].n === 0) {
+    for (const [i, [name, percent, basis, cats]] of defaultGroups.entries()) {
+      const { rows: g } = await pool.query(`INSERT INTO budget_groups (name, percent, basis, sort) VALUES ($1,$2,$3,$4) RETURNING id`, [name, percent, basis, i]);
+      if (cats.length) await pool.query(`UPDATE categories SET group_id = $1 WHERE name = ANY($2) AND group_id IS NULL`, [g[0].id, cats]);
     }
   }
 

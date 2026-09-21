@@ -43,10 +43,11 @@ export async function findCategoryByName(name: string, db: Queryable = pool): Pr
 // ---------- Transações ----------
 
 const TX_SELECT = `
-  SELECT t.*, a.name AS account_name, a.kind AS account_kind, c.name AS category_name, c.icon AS category_icon
+  SELECT t.*, a.name AS account_name, a.kind AS account_kind, c.name AS category_name, c.icon AS category_icon, tr.name AS trip_name
   FROM transactions t
   JOIN accounts a ON a.id = t.account_id
-  LEFT JOIN categories c ON c.id = t.category_id`;
+  LEFT JOIN categories c ON c.id = t.category_id
+  LEFT JOIN trips tr ON tr.id = t.trip_id`;
 
 export type TxFilter = {
   month?: string;
@@ -59,6 +60,7 @@ export type TxFilter = {
   status?: string;
   reviewed?: boolean;
   invoiceMonth?: string;
+  tripId?: number;
   limit?: number;
   offset?: number;
 };
@@ -77,6 +79,7 @@ export async function listTransactions(f: TxFilter = {}, db: Queryable = pool): 
   if (f.status) add('t.status = ?', f.status);
   if (typeof f.reviewed === 'boolean') add('t.reviewed = ?', f.reviewed);
   if (f.invoiceMonth) add('t.invoice_month = ?', monthStart(f.invoiceMonth));
+  if (f.tripId) add('t.trip_id = ?', f.tripId);
   if (f.search) add(`(t.description ILIKE ? OR t.statement_description ILIKE $${params.length + 1})`, `%${f.search}%`);
 
   const sql = `${TX_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -104,6 +107,9 @@ export type NewTransaction = {
   notes?: string | null;
   fitid?: string | null;
   statementDescription?: string | null;
+  /** undefined = liga sozinho à viagem ativa na data (se a categoria não for fixa); null = não ligar */
+  tripId?: number | null;
+  tripExcluded?: boolean;
 };
 
 /**
@@ -116,6 +122,16 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
   const kind: TxKind = input.kind ?? (input.amount < 0 ? 'expense' : 'income');
   const total = Math.max(1, Math.floor(input.installments ?? 1));
   const created: Transaction[] = [];
+
+  // viagem: gasto dentro do período de uma viagem entra nela, a não ser que a categoria seja fixa
+  let tripId = input.tripId ?? null;
+  if (input.tripId === undefined && kind === 'expense') {
+    const { rows: trips } = await db.query<{ id: number }>(`SELECT id FROM trips WHERE $1::date BETWEEN start_date AND end_date ORDER BY start_date DESC LIMIT 1`, [input.date]);
+    if (trips[0]) {
+      const fixed = input.categoryId ? (await db.query<{ fixed: boolean }>(`SELECT fixed FROM categories WHERE id = $1`, [input.categoryId])).rows[0]?.fixed : false;
+      if (!fixed) tripId = trips[0].id;
+    }
+  }
 
   const group = total > 1 ? crypto.randomUUID() : null;
   const cents = Math.round(Math.abs(input.amount) * 100);
@@ -134,8 +150,8 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
     const { rows } = await db.query(
       `INSERT INTO transactions
         (account_id, date, amount, description, category_id, kind, source, status, reviewed, fitid, statement_description,
-         invoice_month, installment_group, installment_n, installment_total, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+         invoice_month, installment_group, installment_n, installment_total, notes, trip_id, trip_excluded)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
       [
         input.accountId, date, amount, description, input.categoryId ?? null, kind, input.source,
         input.status ?? (input.source === 'import' ? 'imported' : 'pending'),
@@ -143,6 +159,8 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
         i === 0 ? input.fitid ?? null : null,
         input.statementDescription ?? null,
         invoiceMonth, group, total > 1 ? i + 1 : null, total > 1 ? total : null, input.notes ?? null,
+        // parcelas seguintes de uma compra na viagem continuam da viagem (o gasto foi lá)
+        tripId, input.tripExcluded ?? false,
       ],
     );
     const tx = await getTransaction(rows[0].id, db);
@@ -160,6 +178,8 @@ export type TxPatch = Partial<{
   reviewed: boolean;
   notes: string | null;
   accountId: number;
+  tripId: number | null;
+  tripExcluded: boolean;
 }>;
 
 export async function updateTransaction(id: number, patch: TxPatch, db: Queryable = pool): Promise<Transaction | null> {
@@ -177,6 +197,8 @@ export async function updateTransaction(id: number, patch: TxPatch, db: Queryabl
   if (patch.reviewed !== undefined) set('reviewed', patch.reviewed);
   if (patch.notes !== undefined) set('notes', patch.notes);
   if (patch.accountId !== undefined) set('account_id', patch.accountId);
+  if (patch.tripId !== undefined) set('trip_id', patch.tripId);
+  if (patch.tripExcluded !== undefined) set('trip_excluded', patch.tripExcluded);
 
   const accountId = patch.accountId ?? current.account_id;
   const date = patch.date ?? current.date;

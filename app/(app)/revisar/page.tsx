@@ -2,11 +2,12 @@ import { listCategories, pendingReview } from '@/lib/queries';
 import { formatBRL } from '@/lib/money';
 import { TxList } from '@/components/TxList';
 import { UnmatchedList } from './UnmatchedList';
+import { listTrips } from '@/lib/trips';
 
 export const metadata = { title: 'Revisar' };
 
 export default async function RevisarPage() {
-  const [{ unreviewed, unmatched }, categories] = await Promise.all([pendingReview(), listCategories()]);
+  const [{ unreviewed, unmatched }, categories, trips] = await Promise.all([pendingReview(), listCategories(), listTrips()]);
   const total = unreviewed.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
 
   return (
@@ -22,7 +23,7 @@ export default async function RevisarPage() {
           <span className="text-[13px] text-ink-2 tabular">{formatBRL(total)}</span>
         </div>
         <p className="text-[13px] text-ink-3">Toque em cada linha, confirme a categoria (ou marque como transferência). Com &ldquo;aprender esse padrão&rdquo; ligado, da próxima vez o sistema categoriza sozinho.</p>
-        <TxList items={unreviewed} categories={categories} emptyText="Tudo revisado." />
+        <TxList items={unreviewed} categories={categories} trips={trips} emptyText="Tudo revisado." />
       </section>
 
       <section className="card p-4 flex flex-col gap-2">

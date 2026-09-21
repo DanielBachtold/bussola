@@ -18,7 +18,7 @@ function revalidateAll() {
 export type ActionState = { ok?: boolean; error?: string; message?: string };
 
 /** Lançamento pela barra rápida: a frase já foi interpretada no cliente e confirmada. */
-export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null }): Promise<ActionState> {
+export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null; tripId?: number | null }): Promise<ActionState> {
   await requireSession();
   const [accounts, categories, rules] = await Promise.all([listAccounts(), listCategories(), listRules(pool)]);
   const parsed = quickParse(text, accounts, categories, rules);
@@ -36,6 +36,7 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
     kind: parsed.kind,
     source: 'manual',
     installments: parsed.installments,
+    tripId: overrides.tripId,
   });
   // aporte em investimento: registra também a saída da conta corrente, se houver só uma
   const target = accounts.find((a) => a.id === accountId);
@@ -54,7 +55,8 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
   }
   revalidateAll();
   const first = created[0];
-  return { ok: true, message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${mirror}.` };
+  const trip = first.trip_name ? ` na viagem ${first.trip_name}` : '';
+  return { ok: true, message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${trip}${mirror}.` };
 }
 
 export async function addTransaction(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
@@ -80,6 +82,7 @@ export async function addTransaction(_prev: ActionState | undefined, formData: F
       source: 'manual',
       installments: Number(formData.get('installments') ?? 1) || 1,
       notes: String(formData.get('notes') ?? '').trim() || null,
+      tripId: (() => { const v = formData.get('trip_id'); return v === null || v === 'auto' ? undefined : v === '' ? null : Number(v); })(),
     });
     revalidateAll();
     return { ok: true, message: 'Lançamento registrado.' };
