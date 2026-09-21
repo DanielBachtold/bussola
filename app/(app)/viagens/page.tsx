@@ -57,16 +57,16 @@ export default async function ViagensPage({ searchParams }: PageProps<'/viagens'
             <TripActions key={selected.id} trip={selected} />
           </section>
 
-          <section className="grid lg:grid-cols-5 gap-4">
-            <div className="card p-4 lg:col-span-3 flex flex-col gap-2">
+          <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="card p-4 lg:col-span-3 flex flex-col gap-2 min-w-0">
               <h2 className="font-semibold">Gastos da viagem <span className="text-ink-3 font-normal text-[13px]">dentro do teto</span></h2>
-              <TxList items={status.expenses} categories={categories} trips={trips} emptyText="Nada ainda. Gastos lançados nas datas da viagem (fora as categorias fixas) aparecem aqui sozinhos." />
+              <TxList items={status.expenses} categories={categories} trips={trips} context="trip" emptyText="Nada ainda. Gastos lançados nas datas da viagem (fora as categorias fixas) aparecem aqui sozinhos." />
             </div>
-            <div className="lg:col-span-2 flex flex-col gap-4">
+            <div className="lg:col-span-2 flex flex-col gap-4 min-w-0">
               <div className="card p-4 flex flex-col gap-2">
                 <h2 className="font-semibold">Pré-pago <span className="text-ink-3 font-normal text-[13px]">fora do teto</span></h2>
                 <p className="text-[12px] text-ink-3">Passagem, hospedagem paga antes, pacote. Conta como gasto do mês em que foi pago, mas não no teto da viagem.</p>
-                <TxList items={status.prepaidItems} categories={categories} trips={trips} compact emptyText="Nenhum item pré-pago." />
+                <TxList items={status.prepaidItems} categories={categories} trips={trips} context="trip" compact emptyText="Nenhum item pré-pago." />
                 <details className="mt-1">
                   <summary className="cursor-pointer text-[13px] text-accent">Registrar item pré-pago</summary>
                   <div className="mt-2"><PrepaidForm key={selected.id} tripId={selected.id} accounts={accounts} categories={categories} /></div>

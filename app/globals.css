@@ -106,58 +106,66 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   -webkit-tap-highlight-color: transparent;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-}
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
 
-.input {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: var(--ink);
-  outline: none;
-}
-.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent); }
-select.input { appearance: auto; }
+  .input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 15px;
+    color: var(--ink);
+    outline: none;
+  }
+  .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent); }
+  select.input { appearance: auto; }
 
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600;
-  border: 1px solid transparent; cursor: pointer; white-space: nowrap;
-  transition: background 120ms, opacity 120ms;
-}
-.btn:disabled { opacity: 0.5; cursor: default; }
-.btn-primary { background: var(--accent); color: var(--accent-ink); }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
-.btn-ghost { background: transparent; color: var(--ink-2); border-color: var(--border-strong); }
-.btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
-.btn-sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600;
+    border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+    transition: background 120ms, opacity 120ms;
+  }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn-ghost { background: transparent; color: var(--ink-2); border-color: var(--border-strong); }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+  .btn-sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
 
-.pill {
-  display: inline-flex; align-items: center; gap: 4px;
-  border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 500;
-  background: var(--surface-2); color: var(--ink-2);
-}
-.pill-good { background: var(--good-bg); color: var(--good); }
-.pill-warn { background: var(--warn-bg); color: var(--warn); }
-.pill-bad { background: var(--bad-bg); color: var(--bad); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 500;
+    background: var(--surface-2); color: var(--ink-2);
+  }
+  .pill-good { background: var(--good-bg); color: var(--good); }
+  .pill-warn { background: var(--warn-bg); color: var(--warn); }
+  .pill-bad { background: var(--bad-bg); color: var(--bad); }
 
-.tabular { font-variant-numeric: tabular-nums; }
-.hairline { border-top: 1px solid var(--border); }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .hairline { border-top: 1px solid var(--border); }
+
+  /* toque: links pequenos de cabeçalho ganham área de 44px sem mudar o visual */
+  .tap { display: inline-flex; align-items: center; min-height: 44px; margin: -8px 0; }
+}
 
 .recharts-cartesian-grid line { stroke: var(--grid); }
 .recharts-cartesian-axis line { stroke: var(--axis); }
-.recharts-cartesian-axis-tick text { fill: var(--ink-3); font-size: 11px; }
+.recharts-cartesian-axis-tick text { fill: var(--ink-3); font-size: 12px; }
 .recharts-tooltip-cursor { stroke: var(--axis); }
 
 @media (max-width: 767px) {
   .card { border-radius: 14px; }
+  /* abaixo de 16px o Safari dá zoom ao focar o campo */
+  .input, select.input { font-size: 16px; }
 }

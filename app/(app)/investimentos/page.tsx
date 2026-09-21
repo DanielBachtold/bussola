@@ -66,7 +66,7 @@ export default async function InvestimentosPage() {
         </section>
       ) : null}
 
-      <section className="grid lg:grid-cols-2 gap-4">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-4 flex flex-col gap-3">
           <h2 className="font-semibold">Alocação {latestMonth ? <span className="text-ink-3 font-normal text-[13px]">{formatMonth(latestMonth)}</span> : null}</h2>
           <BarList items={items} />

@@ -6,9 +6,18 @@ const brlCompact = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 1,
 });
 
-export function formatBRL(value: number | string | null | undefined): string {
+const brlNoCents = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const axis = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+
+export function formatBRL(value: number | string | null | undefined, opts?: { cents?: boolean }): string {
   const n = typeof value === 'string' ? Number(value) : (value ?? 0);
-  return brl.format(Number.isFinite(n) ? n : 0);
+  const v = Number.isFinite(n) ? n : 0;
+  return opts?.cents === false ? brlNoCents.format(v) : brl.format(v);
+}
+
+/** Eixo de gráfico: "8 mil", "7,5 mil", "0" (o R$ fica no tooltip). */
+export function formatAxis(value: number): string {
+  return axis.format(Number.isFinite(value) ? value : 0);
 }
 
 export function formatBRLCompact(value: number | string | null | undefined): string {

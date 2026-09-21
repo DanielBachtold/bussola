@@ -4,7 +4,7 @@ import { Nav, type NavItem } from '@/components/Nav';
 import { logout } from '@/app/actions/auth';
 import { getBudgetStatus } from '@/lib/budget';
 import { tripAlerts } from '@/lib/trips';
-import { BudgetAlerts } from '@/components/BudgetBars';
+import { TopAlerts } from '@/components/TopAlerts';
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   await requireSession();
@@ -20,9 +20,9 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const items: NavItem[] = [
     { href: '/', label: 'Painel', icon: '◎', mobile: true },
     { href: '/lancar', label: 'Lançar', icon: '＋', mobile: true },
-    { href: '/chat', label: 'Chat', icon: '✦', mobile: true },
-    { href: '/transacoes', label: 'Extrato', icon: '☰', mobile: true },
-    { href: '/revisar', label: 'Revisar', icon: '✓', badge: pending },
+    { href: '/transacoes', label: 'Lançamentos', icon: '☰', mobile: true },
+    { href: '/revisar', label: 'Revisar', icon: '✓', badge: pending, mobile: true },
+    { href: '/chat', label: 'Chat', icon: '✦' },
     { href: '/faturas', label: 'Faturas', icon: '▤' },
     { href: '/viagens', label: 'Viagens', icon: '✈' },
     { href: '/investimentos', label: 'Investimentos', icon: '◆' },
@@ -33,8 +33,8 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   return (
     <div className="min-h-full md:pl-56">
       <Nav items={items} onLogout={logout} />
-      <main className="mx-auto w-full max-w-6xl px-4 py-5 md:px-8 md:py-8 pb-24 md:pb-10">
-        <BudgetAlerts alerts={alerts} />
+      <main className="mx-auto w-full max-w-6xl px-4 py-5 md:px-8 md:py-8 pb-24 md:pb-10 overflow-x-clip" style={{ paddingTop: 'max(20px, env(safe-area-inset-top))' }}>
+        <TopAlerts alerts={alerts} />
         {children}
       </main>
     </div>

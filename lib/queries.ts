@@ -349,13 +349,13 @@ export async function invoiceSummaries(accountId?: number, db: Queryable = pool)
 export type Commitment = { month: string; total: number; count: number };
 
 /** Parcelas já assumidas que ainda vão cair nas próximas faturas. */
-export async function futureCommitments(db: Queryable = pool): Promise<Commitment[]> {
+export async function futureCommitments(accountId?: number, db: Queryable = pool): Promise<Commitment[]> {
   const { rows } = await db.query<Commitment>(
     `SELECT to_char(invoice_month, 'YYYY-MM') AS month, ABS(SUM(amount))::numeric AS total, COUNT(*)::int AS count
      FROM transactions
-     WHERE installment_group IS NOT NULL AND kind = 'expense' AND invoice_month > $1
+     WHERE installment_group IS NOT NULL AND kind = 'expense' AND invoice_month > $1 ${accountId ? 'AND account_id = $2' : ''}
      GROUP BY 1 ORDER BY 1`,
-    [monthStart(currentMonth())],
+    accountId ? [monthStart(currentMonth()), accountId] : [monthStart(currentMonth())],
   );
   return rows;
 }

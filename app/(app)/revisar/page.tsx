@@ -26,7 +26,7 @@ export default async function RevisarPage() {
           <span className="text-[13px] text-ink-2 tabular">{formatBRL(total)}</span>
         </div>
         <p className="text-[13px] text-ink-3">Toque em cada linha, confirme a categoria (ou marque como transferência). Com &ldquo;aprender esse padrão&rdquo; ligado, da próxima vez o sistema categoriza sozinho.</p>
-        <TxList items={unreviewed} categories={categories} trips={trips} emptyText="Tudo revisado." />
+        <TxList items={unreviewed} categories={categories} trips={trips} hideStatus emptyText="Tudo revisado." />
       </section>
 
       <section className="card p-4 flex flex-col gap-2">

@@ -47,7 +47,7 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
       {/* celular: barra inferior + menu "mais" */}
       {more ? (
         <div className="md:hidden fixed inset-0 z-20 bg-black/40" onClick={() => setMore(false)}>
-          <div className="absolute bottom-0 inset-x-0 card !rounded-b-none p-4 flex flex-col gap-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 76px)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="absolute bottom-0 inset-x-0 card rounded-b-none p-4 flex flex-col gap-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 76px)' }} onClick={(e) => e.stopPropagation()}>
             {rest.map((it) => (
               <Link key={it.href} href={it.href} onClick={() => setMore(false)} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] ${isActive(it.href) ? 'bg-surface-2 font-semibold' : 'text-ink-2'}`}>
                 <span className="w-5 text-center" aria-hidden>{it.icon}</span>
@@ -63,19 +63,23 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
           </div>
         </div>
       ) : null}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/90 backdrop-blur-md border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="grid grid-cols-5">
           {primary.map((it) => (
-            <Link key={it.href} href={it.href} className={`relative flex flex-col items-center gap-0.5 py-2 text-[11px] ${isActive(it.href) && !more ? 'text-accent font-semibold' : 'text-ink-3'}`}>
-              <span className="text-[18px] leading-none" aria-hidden>{it.icon}</span>
+            <Link key={it.href} href={it.href} className={`relative flex flex-col items-center gap-0.5 py-2 text-[12px] ${isActive(it.href) && !more ? 'text-accent font-semibold' : 'text-ink-3'}`}>
+              <span className="relative text-[18px] leading-none" aria-hidden>
+                {it.icon}
+                {it.badge ? <span className="absolute -top-1.5 left-full ml-0.5 pill pill-warn !px-1.5 !py-0 !text-[10px] leading-4">{it.badge}</span> : null}
+              </span>
               {it.label}
-              {it.badge ? <span className="absolute top-1 right-[calc(50%-18px)] pill pill-warn !px-1.5 !py-0 !text-[10px]">{it.badge}</span> : null}
             </Link>
           ))}
-          <button type="button" onClick={() => setMore((m) => !m)} className={`relative flex flex-col items-center gap-0.5 py-2 text-[11px] ${more || moreActive ? 'text-accent font-semibold' : 'text-ink-3'}`} aria-expanded={more}>
-            <span className="text-[18px] leading-none" aria-hidden>⋯</span>
+          <button type="button" onClick={() => setMore((m) => !m)} className={`relative flex flex-col items-center gap-0.5 py-2 text-[12px] ${more || moreActive ? 'text-accent font-semibold' : 'text-ink-3'}`} aria-expanded={more}>
+            <span className="relative text-[18px] leading-none" aria-hidden>
+              ⋯
+              {restBadge ? <span className="absolute -top-1.5 left-full ml-0.5 pill pill-warn !px-1.5 !py-0 !text-[10px] leading-4">{restBadge}</span> : null}
+            </span>
             Mais
-            {restBadge ? <span className="absolute top-1 right-[calc(50%-18px)] pill pill-warn !px-1.5 !py-0 !text-[10px]">{restBadge}</span> : null}
           </button>
         </div>
       </nav>

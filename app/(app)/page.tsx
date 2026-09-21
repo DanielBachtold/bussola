@@ -59,14 +59,17 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
     hint: `${c.count}`,
     href: c.category_id ? `/transacoes?m=${month}&c=${c.category_id}` : `/transacoes?m=${month}`,
   }));
-  if (rest.length) barItems.push({ label: `Outras ${rest.length}`, value: rest.reduce((a, c) => a + c.total, 0), marker: null, hint: `${rest.reduce((a, c) => a + c.count, 0)}`, href: `/transacoes?m=${month}` });
+  if (rest.length) barItems.push({ label: rest.length === 1 ? `${rest[0].icon ?? ''} ${rest[0].name}`.trim() : `Outras ${rest.length}`, value: rest.reduce((a, c) => a + c.total, 0), marker: null, hint: `${rest.reduce((a, c) => a + c.count, 0)}`, href: `/transacoes?m=${month}` });
+  const restMobile = byCat.slice(5);
+  const barItemsMobile = barItems.slice(0, 5);
+  if (restMobile.length) barItemsMobile.push({ label: restMobile.length === 1 ? `${restMobile[0].icon ?? ''} ${restMobile[0].name}`.trim() : `Outras ${restMobile.length}`, value: restMobile.reduce((a, c) => a + c.total, 0), marker: null, hint: `${restMobile.reduce((a, c) => a + c.count, 0)}`, href: `/transacoes?m=${month}` });
 
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Painel</h1>
-          <p className="text-sm text-ink-2">Onde o dinheiro está indo neste mês.</p>
+          <p className="text-sm text-ink-2">{month === currentMonth() ? 'Onde o dinheiro está indo neste mês.' : `Como foi ${formatMonth(month, true).toLowerCase()}.`}</p>
         </div>
         <MonthNav month={month} basePath="/" />
       </header>
@@ -79,35 +82,44 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Gasto no mês" value={totals.expense} delta={avgTotal ? { pct: (totals.expense - avgTotal) / avgTotal } : null} hint={avgTotal ? `média 3m ${formatBRL(avgTotal)}` : `${totals.expenseCount} lançamentos`} />
-        <StatTile label="Receita" value={totals.income} delta={prevTotals.income ? { pct: (totals.income - prevTotals.income) / prevTotals.income, goodWhenDown: false } : null} hint={prevTotals.income ? `${formatMonth(prevMonth)} ${formatBRL(prevTotals.income)}` : undefined} />
-        <StatTile label="Resultado" value={balance} tone={balance < 0 ? 'bad' : 'good'} hint={totals.income ? `${Math.round((balance / totals.income) * 100)}% da receita` : 'sem receita registrada'} />
-        <StatTile label="Faturas abertas" value={openTotal} hint={openInvoices.length ? openInvoices.map((i) => `${i.card.name} vence ${formatDate(i.due).slice(0, 5)}`).join(' · ') : 'nenhum cartão'} />
+      <section className="order-1 lg:order-none grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatTile label="Gasto no mês" value={totals.expense} delta={avgTotal ? { pct: (totals.expense - avgTotal) / avgTotal } : null} hint={avgTotal ? `média ${formatBRL(avgTotal, { cents: false })}` : `${totals.expenseCount} lançamentos`} />
+        <StatTile label="Receita" value={totals.income} delta={prevTotals.income ? { pct: (totals.income - prevTotals.income) / prevTotals.income, goodWhenDown: false } : null} hint={prevTotals.income ? `${formatMonth(prevMonth)}: ${formatBRL(prevTotals.income, { cents: false })}` : undefined} />
+        <StatTile label="Sobrou" value={balance} tone={balance < 0 ? 'bad' : 'good'} hint={totals.income ? `${Math.round((balance / totals.income) * 100)}% da receita` : 'sem receita registrada'} />
+        <StatTile label="Faturas abertas" value={openTotal} hint={openInvoices.length === 1 ? `vence ${formatDate(openInvoices[0].due).slice(0, 5)}` : openInvoices.length ? `${openInvoices.length} cartões · próx. ${formatDate([...openInvoices].sort((a, b) => a.due.localeCompare(b.due))[0].due).slice(0, 5)}` : 'nenhum cartão'} />
       </section>
 
       {tripStatuses.length ? (
-        <section className="card p-4 flex flex-col gap-4">
+        <section className={`${tripStatuses.some((s) => s.phase === 'active') ? 'order-2' : 'order-9'} lg:order-none card p-4 flex flex-col gap-4`}>
           <div className="flex items-baseline justify-between">
             <h2 className="font-semibold">Viagem</h2>
-            <Link href="/viagens" className="text-[13px] text-accent">ver</Link>
+            <Link href="/viagens" className="text-[13px] text-accent tap">ver</Link>
           </div>
           {tripStatuses.map((s) => <TripCard key={s.trip.id} s={s} />)}
         </section>
       ) : null}
 
-      <section id="orcamento" className="card p-4 flex flex-col gap-3 scroll-mt-4">
+      <section className="order-3 lg:hidden card p-4 flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold">Orçamento <span className="text-ink-3 font-normal text-[13px]">por percentual da renda</span></h2>
-          <Link href="/config#orcamento" className="text-[13px] text-accent">configurar</Link>
+          <h2 className="font-semibold">Últimos lançamentos</h2>
+          <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent tap">ver todos</Link>
         </div>
-        <BudgetBars status={budget} />
+        <TxList items={recent.slice(0, 5)} categories={categories} />
+      </section>
+
+      <section id="orcamento" className="order-4 lg:order-none card p-4 flex flex-col gap-3 scroll-mt-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-semibold">Orçamento <span className="text-ink-3 font-normal text-[13px] hidden sm:inline">por percentual da renda</span></h2>
+          <Link href="/config#orcamento" className="text-[13px] text-accent tap">configurar</Link>
+        </div>
+        <div className="lg:hidden"><BudgetBars status={budget} compact /></div>
+        <div className="hidden lg:block"><BudgetBars status={budget} /></div>
       </section>
 
       {insights.length ? (
-        <section className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <section className="order-5 lg:order-none grid md:grid-cols-2 lg:grid-cols-3 gap-3">
           {insights.map((i, idx) => (
-            <div key={idx} className={`card p-4 border-l-4 ${i.tone === 'good' ? 'border-l-good' : i.tone === 'warning' ? 'border-l-warn' : 'border-l-border-strong'}`}>
+            <div key={idx} className={`card p-4 border-l-4 ${idx >= 3 ? 'hidden md:block' : ''} ${i.tone === 'good' ? 'border-l-good' : i.tone === 'warning' ? 'border-l-warn' : 'border-l-border-strong'}`}>
               <p className="text-[14px] font-semibold leading-snug">{i.title}</p>
               <p className="text-[13px] text-ink-2 mt-1">{i.detail}</p>
             </div>
@@ -115,45 +127,47 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         </section>
       ) : null}
 
-      <section className="grid lg:grid-cols-5 gap-4">
-        <div className="card p-4 lg:col-span-2 flex flex-col gap-3">
+      <section className="order-6 lg:order-none grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="card p-4 lg:col-span-2 flex flex-col gap-3 min-w-0">
           <div className="flex items-baseline justify-between">
             <h2 className="font-semibold">Por categoria</h2>
-            <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent">ver tudo</Link>
+            <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent tap">ver tudo</Link>
           </div>
-          <BarList items={barItems} markerLabel="média dos últimos 3 meses" />
+          <div className="lg:hidden"><BarList items={barItemsMobile} markerLabel="média dos últimos 3 meses" /></div>
+          <div className="hidden lg:block"><BarList items={barItems} markerLabel="média dos últimos 3 meses" /></div>
         </div>
-        <div className="card p-4 lg:col-span-3 flex flex-col gap-3">
+        <div className="card p-4 lg:col-span-3 flex flex-col gap-3 min-w-0">
           <h2 className="font-semibold">Ritmo do mês <span className="text-ink-3 font-normal text-[13px]">gasto acumulado por dia</span></h2>
           <CumulativeChart data={daily} currentLabel={formatMonth(month)} previousLabel={formatMonth(prevMonth)} />
         </div>
       </section>
 
-      <section className="grid lg:grid-cols-5 gap-4">
-        <div className="card p-4 lg:col-span-3 flex flex-col gap-3">
-          <h2 className="font-semibold">Últimos 12 meses</h2>
-          <MonthlyChart data={series} />
+      <section className="order-7 lg:order-none grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="card p-4 lg:col-span-3 flex flex-col gap-3 min-w-0">
+          <h2 className="font-semibold"><span className="md:hidden">Últimos 6 meses</span><span className="hidden md:inline">Últimos 12 meses</span></h2>
+          <div className="md:hidden"><MonthlyChart data={series.slice(-6)} /></div>
+          <div className="hidden md:block"><MonthlyChart data={series} /></div>
         </div>
-        <div className="card p-4 lg:col-span-2 flex flex-col gap-3">
-          <h2 className="font-semibold">Posição</h2>
+        <div className="card p-4 lg:col-span-2 flex flex-col gap-3 min-w-0">
+          <h2 className="font-semibold">Saldos</h2>
           <dl className="flex flex-col divide-y divide-border text-[14px]">
             {checking.map((c) => (
               <div key={c.id} className="flex justify-between py-2"><dt className="text-ink-2">{c.name} <span className="text-ink-3 text-[12px]">em {formatDate(c.balance_at!).slice(0, 5)}</span></dt><dd className="tabular font-medium">{formatBRL(c.balance)}</dd></div>
             ))}
             {checking.length > 1 ? <div className="flex justify-between py-2"><dt className="text-ink-2">Em conta</dt><dd className="tabular font-semibold">{formatBRL(checkingTotal)}</dd></div> : null}
             <div className="flex justify-between py-2"><dt className="text-ink-2">Investido</dt><dd className="tabular font-semibold">{invested ? formatBRL(invested) : <Link href="/investimentos" className="text-accent text-[13px]">registrar</Link>}</dd></div>
-            <div className="flex justify-between py-2"><dt className="text-ink-2">Parcelas futuras</dt><dd className={`tabular font-semibold ${committed ? 'text-warn' : ''}`}>{formatBRL(committed)}</dd></div>
+            <div className="flex justify-between py-2"><dt className="text-ink-2">Parcelas a vencer</dt><dd className={`tabular font-semibold ${committed ? 'text-warn' : ''}`}>{formatBRL(committed)}</dd></div>
             {commitments.slice(0, 4).map((c) => (
-              <div key={c.month} className="flex justify-between py-1.5 text-[13px]"><dt className="text-ink-3 pl-3">{formatMonth(c.month)} · {c.count} parc.</dt><dd className="tabular text-ink-2">{formatBRL(c.total)}</dd></div>
+              <div key={c.month} className="flex justify-between py-1.5 text-[13px]"><dt className="text-ink-3 pl-3">{formatMonth(c.month)} · {c.count} {c.count === 1 ? 'parcela' : 'parcelas'}</dt><dd className="tabular text-ink-2">{formatBRL(c.total)}</dd></div>
             ))}
           </dl>
         </div>
       </section>
 
-      <section className="card p-4 flex flex-col gap-2">
+      <section className="hidden lg:flex card p-4 flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <h2 className="font-semibold">Últimos lançamentos</h2>
-          <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent">extrato completo</Link>
+          <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent tap">ver todos</Link>
         </div>
         <TxList items={recent} categories={categories} />
       </section>

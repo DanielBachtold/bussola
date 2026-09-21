@@ -7,41 +7,53 @@ import type { Category, Transaction, Trip, TxKind } from '@/lib/types';
 import { editTransaction, removeTransaction, setCategory, setKind } from '@/app/actions/transactions';
 import { setTransactionTrip } from '@/app/actions/trips';
 
-export function TxList({ items, categories, trips, compact = false, emptyText = 'Nenhum lançamento.' }: { items: Transaction[]; categories: Category[]; trips?: Trip[]; compact?: boolean; emptyText?: string }) {
+export type TxListContext = 'invoice' | 'trip';
+
+export function TxList({ items, categories, trips, compact = false, hideStatus = false, context, emptyText = 'Nenhum lançamento.' }: {
+  items: Transaction[]; categories: Category[]; trips?: Trip[]; compact?: boolean;
+  /** esconde o estado (revisar / sem extrato) quando o título da seção já diz */
+  hideStatus?: boolean;
+  /** omite o que a tela já mostra: em faturas, a conta e a fatura; em viagens, a viagem */
+  context?: TxListContext;
+  emptyText?: string;
+}) {
   if (!items.length) return <p className="text-sm text-ink-3 py-6 text-center">{emptyText}</p>;
   return (
     <ul className="flex flex-col">
-      {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} />)}
+      {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} />)}
     </ul>
   );
 }
 
-function TxRow({ tx, categories, trips, compact }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean }) {
+function TxRow({ tx, categories, trips, compact, hideStatus, context }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean; hideStatus: boolean; context?: TxListContext }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const negative = tx.amount < 0;
   const amountClass = tx.kind === 'transfer' ? 'text-ink-3' : tx.kind === 'income' ? 'text-good' : 'text-ink';
-  const status = tx.reviewed === false ? 'revisar' : tx.status === 'pending' ? 'aguardando extrato' : tx.status === 'reconciled' ? 'conciliado' : null;
+  // conciliado é o estado normal de quase tudo: não pede ação, não ganha selo
+  const status = hideStatus ? null : tx.reviewed === false ? 'revisar' : tx.status === 'pending' && tx.source !== 'import' ? 'sem extrato' : null;
+  const noCategory = tx.kind === 'expense' && !tx.category_id;
+  const meta = [
+    formatDateShort(tx.date),
+    tx.kind === 'transfer' ? 'transferência' : tx.category_name,
+    context === 'invoice' ? null : tx.account_name,
+    context === 'invoice' || !tx.invoice_month ? null : `fatura ${formatMonth(tx.invoice_month)}`,
+    context === 'trip' || !tx.trip_name ? null : `✈ ${tx.trip_name}${tx.trip_excluded ? ' (fora do teto)' : ''}`,
+    context === 'trip' && tx.trip_excluded ? 'fora do teto' : null,
+  ].filter(Boolean);
 
   return (
-    <li className="hairline first:border-t-0">
+    <li className="hairline first:border-t-0 min-w-0">
       <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-surface-2/60 -mx-2 px-2 rounded-md">
-        <span className="w-9 h-9 rounded-full bg-surface-2 flex items-center justify-center text-[16px] shrink-0" aria-hidden>
-          {tx.kind === 'transfer' ? '⇄' : tx.category_icon ?? (tx.kind === 'income' ? '↓' : '·')}
+        <span className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] shrink-0 ${noCategory ? 'bg-warn-bg text-warn font-semibold' : 'bg-surface-2'}`} aria-hidden title={noCategory ? 'sem categoria' : undefined}>
+          {tx.kind === 'transfer' ? '⇄' : tx.kind === 'income' ? '↓' : noCategory ? '?' : tx.category_icon ?? '·'}
         </span>
         <span className="flex-1 min-w-0">
           <span className="block truncate text-[14px] font-medium">{tx.description}</span>
-          <span className="block truncate text-[12px] text-ink-3">
-            {formatDateShort(tx.date)} · {tx.account_name}
-            {!compact && tx.category_name ? ` · ${tx.category_name}` : ''}
-            {tx.kind === 'transfer' ? ' · transferência' : ''}
-            {tx.invoice_month ? ` · fatura ${formatMonth(tx.invoice_month)}` : ''}
-            {tx.trip_name ? ` · ✈ ${tx.trip_name}${tx.trip_excluded ? ' (fora do teto)' : ''}` : ''}
-          </span>
+          <span className="block truncate text-[12px] text-ink-3">{meta.join(' · ')}</span>
         </span>
         <span className="flex flex-col items-end shrink-0">
-          <span className={`tabular text-[14px] font-semibold ${amountClass}`}>{negative ? '−' : '+'}{formatBRL(Math.abs(tx.amount))}</span>
-          {status ? <span className={`pill !text-[10px] ${status === 'revisar' ? 'pill-warn' : status === 'conciliado' ? 'pill-good' : ''}`}>{status}</span> : null}
+          <span className={`text-[14px] font-semibold ${amountClass}`}>{tx.kind === 'income' ? '+' : ''}{formatBRL(Math.abs(tx.amount))}</span>
+          {status ? <span className={`pill !text-[11px] ${status === 'revisar' ? 'pill-warn' : ''}`}>{status}</span> : null}
         </span>
       </button>
       {open ? <TxEditor tx={tx} categories={categories} trips={trips} pending={pending} start={start} close={() => setOpen(false)} /> : null}

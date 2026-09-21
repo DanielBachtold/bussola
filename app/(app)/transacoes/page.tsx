@@ -8,7 +8,7 @@ import { Filters } from './Filters';
 import { intParam, monthParam } from '@/lib/params';
 import { listTrips } from '@/lib/trips';
 
-export const metadata = { title: 'Extrato' };
+export const metadata = { title: 'Lançamentos' };
 
 import { requireSession } from '@/lib/session';
 
@@ -34,7 +34,7 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">Extrato</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">Lançamentos</h1>
           <p className="text-sm text-ink-2">{items.length} lançamentos · gasto {formatBRL(expense)} · receita {formatBRL(income)}</p>
         </div>
         <MonthNav month={month} basePath="/transacoes" extra={extra} />

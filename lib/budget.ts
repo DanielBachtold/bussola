@@ -115,8 +115,8 @@ export async function getBudgetStatus(month: string = currentMonth(), db: Querya
       if (s.status !== 'ok') alerts.push({ tone: 'warning', groupId: s.group.id, title: `Investimentos abaixo da meta`, detail: `${formatBRL(s.spent)} aportados de ${formatBRL(s.limit)} previstos (${Math.round(s.pct * 100)}%).` });
       continue;
     }
-    if (s.status === 'over') alerts.push({ tone: 'bad', groupId: s.group.id, title: `${s.group.name} passou do limite`, detail: `${formatBRL(s.spent)} de ${formatBRL(s.limit)} (${Math.round(s.pct * 100)}%), ${formatBRL(s.spent - s.limit)} acima.` });
-    else if (s.status === 'warn') alerts.push({ tone: 'warning', groupId: s.group.id, title: `${s.group.name} chegando no limite`, detail: `${formatBRL(s.spent)} de ${formatBRL(s.limit)} (${Math.round(s.pct * 100)}%), sobram ${formatBRL(s.limit - s.spent)}.` });
+    if (s.status === 'over') alerts.push({ tone: 'bad', groupId: s.group.id, title: `${s.group.name} passou do limite`, detail: `${formatBRL(s.spent - s.limit)} acima de ${formatBRL(s.limit)} (${Math.round(s.pct * 100)}%).` });
+    else if (s.status === 'warn') alerts.push({ tone: 'warning', groupId: s.group.id, title: `${s.group.name} chegando no limite`, detail: `sobram ${formatBRL(s.limit - s.spent)} de ${formatBRL(s.limit)} (${Math.round(s.pct * 100)}%).` });
   }
 
   return {

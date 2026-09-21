@@ -85,11 +85,11 @@ export function ChatView({ mode, chatId, chats, initial }: { mode: 'ai' | 'local
   }
 
   return (
-    <div className="flex flex-col gap-3 h-[calc(100dvh-140px)] md:h-[calc(100dvh-110px)]">
+    <div className="flex flex-col gap-3 h-[calc(100svh-150px)] md:h-[calc(100dvh-110px)]">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Chat</h1>
-          <p className="text-sm text-ink-2">
+          <p className="text-sm text-ink-2 hidden md:block">
             Pergunte sobre seus números ou sobre o sistema.{' '}
             {mode === 'local'
               ? <span className="pill" title="Sem chave de IA: responde perguntas frequentes direto do banco, sem custo.">modo local, sem IA</span>

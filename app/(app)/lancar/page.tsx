@@ -29,7 +29,7 @@ export default async function LancarPage() {
       </details>
       <section className="card p-4 flex flex-col gap-2">
         <h2 className="font-semibold">Lançados neste mês, aguardando extrato</h2>
-        <TxList items={recent} categories={categories} trips={trips} compact emptyText="Nada pendente. Quando subir o extrato, o que você lançou aqui é conciliado automaticamente." />
+        <TxList items={recent} categories={categories} trips={trips} hideStatus emptyText="Nada pendente. Quando subir o extrato, o que você lançou aqui é conciliado automaticamente." />
       </section>
     </div>
   );

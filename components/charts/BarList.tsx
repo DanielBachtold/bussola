@@ -22,7 +22,7 @@ export function BarList({ items, color = 'var(--s1)', markerLabel }: { items: Ba
             </div>
             <div className="relative h-[7px] rounded-[4px] bg-surface-2 overflow-visible" title={m != null && markerLabel ? `${markerLabel}: ${formatBRL(it.marker!)}` : undefined}>
               <div className="absolute inset-y-0 left-0 rounded-[4px]" style={{ width: `${w}%`, background: it.color ?? color }} />
-              {m != null ? <div className="absolute -top-[3px] h-[13px] w-[2px] rounded bg-ink-3" style={{ left: `calc(${Math.min(m, 100)}% - 1px)` }} aria-label={markerLabel} /> : null}
+              {m != null ? <div className="absolute -top-[3px] h-[13px] w-[3px] rounded bg-ink" style={{ left: `calc(${Math.min(m, 99)}% - 1.5px)`, boxShadow: '0 0 0 2px var(--surface)' }} aria-label={markerLabel} /> : null}
             </div>
           </>
         );
@@ -33,7 +33,7 @@ export function BarList({ items, color = 'var(--s1)', markerLabel }: { items: Ba
         );
       })}
       {markerLabel && items.some((i) => i.marker != null) ? (
-        <p className="text-[11px] text-ink-3 flex items-center gap-1.5"><span className="inline-block h-[10px] w-[2px] bg-ink-3 rounded" /> {markerLabel}</p>
+        <p className="text-[11px] text-ink-3 flex items-center gap-1.5"><span className="inline-block h-[10px] w-[3px] bg-ink rounded" /> {markerLabel}</p>
       ) : null}
     </div>
   );

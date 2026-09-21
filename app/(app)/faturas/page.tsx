@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { addMonths, formatDate, formatMonth, invoiceDates, openInvoiceMonth } from '@/lib/dates';
+import { addMonths, daysBetween, formatDate, formatMonth, invoiceDates, openInvoiceMonth, todayISO } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import { futureCommitments, invoiceSummaries, listAccounts, listCategories, listTransactions } from '@/lib/queries';
 import { TxList } from '@/components/TxList';
@@ -30,7 +30,7 @@ export default async function FaturasPage({ searchParams }: PageProps<'/faturas'
   const month = monthParam(sp.m) ?? openMonth;
 
   const [summaries, items, commitments] = await Promise.all([
-    invoiceSummaries(card.id), listTransactions({ accountId: card.id, invoiceMonth: month, limit: 1000 }), futureCommitments(),
+    invoiceSummaries(card.id), listTransactions({ accountId: card.id, invoiceMonth: month, limit: 1000 }), futureCommitments(card.id),
   ]);
   const total = items.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
   const payments = items.filter((t) => t.kind !== 'expense').reduce((a, t) => a + t.amount, 0);
@@ -49,7 +49,7 @@ export default async function FaturasPage({ searchParams }: PageProps<'/faturas'
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Faturas</h1>
-          <p className="text-sm text-ink-2">Fecha dia {card.closing_day}, vence dia {card.due_day}.</p>
+          <p className="text-sm text-ink-2">{card.name} · fecha dia {card.closing_day}, vence dia {card.due_day}.</p>
         </div>
         {accounts.length > 1 ? (
           <div className="flex gap-1">
@@ -75,24 +75,24 @@ export default async function FaturasPage({ searchParams }: PageProps<'/faturas'
         <div className="card p-4">
           <span className="text-[12px] uppercase tracking-wide text-ink-3 font-medium">Fatura {formatMonth(month)} · {status}</span>
           <span className="block text-[28px] font-semibold">{formatBRL(total)}</span>
-          <span className="text-[12px] text-ink-2">{items.filter((t) => t.kind === 'expense').length} compras{installmentsHere ? `, ${installmentsHere} parcelas` : ''}</span>
+          <span className="text-[12px] text-ink-2">{items.filter((t) => t.kind === 'expense').length} lançamentos{installmentsHere ? `, ${installmentsHere} ${installmentsHere === 1 ? 'deles parcela' : 'deles parcelas'}` : ''}</span>
         </div>
         <div className="card p-4">
-          <span className="text-[12px] uppercase tracking-wide text-ink-3 font-medium">Fechamento</span>
-          <span className="block text-[22px] font-semibold">{formatDate(closes)}</span>
-          <span className="text-[12px] text-ink-2">vence em {formatDate(due)}</span>
+          <span className="text-[12px] uppercase tracking-wide text-ink-3 font-medium">{status === 'fechada' ? 'Fechou em' : 'Fecha em'}</span>
+          <span className="block text-[22px] font-semibold">{status === 'fechada' ? formatDate(closes) : `${Math.max(daysBetween(todayISO(), closes), 0)} dias`}</span>
+          <span className="text-[12px] text-ink-2">{status === 'fechada' ? `venceu em ${formatDate(due)}` : `${formatDate(closes)} · vence ${formatDate(due)}`}</span>
         </div>
         <div className="card p-4">
-          <span className="text-[12px] uppercase tracking-wide text-ink-3 font-medium">Comprometido adiante</span>
+          <span className="text-[12px] uppercase tracking-wide text-ink-3 font-medium">Parcelas a vencer</span>
           <span className="block text-[22px] font-semibold text-warn">{formatBRL(commitments.reduce((a, c) => a + c.total, 0))}</span>
-          <span className="text-[12px] text-ink-2">{commitments.length ? `parcelas até ${formatMonth(commitments[commitments.length - 1].month)}` : 'nenhuma parcela futura'}</span>
+          <span className="text-[12px] text-ink-2">{commitments.length ? `última em ${formatMonth(commitments[commitments.length - 1].month)}` : 'nenhuma parcela futura'}</span>
         </div>
       </section>
 
       {payments ? <p className="text-[13px] text-ink-3">Pagamentos e estornos nesta fatura: {formatBRL(payments)} (não contam como gasto).</p> : null}
 
       <section className="card px-4 py-2">
-        <TxList items={items} categories={categories} emptyText="Nenhuma compra nesta fatura." />
+        <TxList items={items} categories={categories} context="invoice" emptyText="Nenhuma compra nesta fatura." />
       </section>
     </div>
   );
