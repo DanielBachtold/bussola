@@ -97,9 +97,19 @@ export async function saveRule(_prev: ActionState | undefined, formData: FormDat
   return { ok: true, message: 'Regra salva.' };
 }
 
-export async function deleteRule(id: number): Promise<ActionState> {
+export async function deleteRule(id: number): Promise<ActionState & { rule?: { pattern: string; categoryId: number | null; kind: string | null } }> {
   await requireSession();
-  await pool.query(`DELETE FROM category_rules WHERE id = $1`, [id]);
+  const { rows } = await pool.query<{ pattern: string; category_id: number | null; kind: string | null }>(`DELETE FROM category_rules WHERE id = $1 RETURNING pattern, category_id, kind`, [id]);
+  revalidate();
+  return rows[0] ? { ok: true, rule: { pattern: rows[0].pattern, categoryId: rows[0].category_id, kind: rows[0].kind } } : { error: 'Regra não encontrada.' };
+}
+
+export async function restoreRule(rule: { pattern: string; categoryId: number | null; kind: string | null }): Promise<ActionState> {
+  await requireSession();
+  await pool.query(
+    `INSERT INTO category_rules (pattern, category_id, kind) VALUES ($1,$2,$3) ON CONFLICT (pattern) DO UPDATE SET category_id = EXCLUDED.category_id, kind = EXCLUDED.kind`,
+    [rule.pattern, rule.categoryId, rule.kind],
+  );
   revalidate();
   return { ok: true };
 }

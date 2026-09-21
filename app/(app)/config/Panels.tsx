@@ -1,7 +1,8 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
-import { archiveAccount, deleteCategory, deleteRule, saveAccount, saveCategory, saveRule } from '@/app/actions/config';
+import { archiveAccount, deleteCategory, deleteRule, restoreRule, saveAccount, saveCategory, saveRule } from '@/app/actions/config';
+import { useToast } from '@/components/Toast';
 import { formatBRL } from '@/lib/money';
 import { KIND_LABEL, type Account, type Category, type Rule } from '@/lib/types';
 
@@ -149,6 +150,7 @@ function CategoryForm({ category, close }: { category: Category | null; close: (
 export function RulesPanel({ rules, categories }: { rules: Rule[]; categories: Category[] }) {
   const [state, action, pending] = useActionState(saveRule, undefined);
   const [deleting, start] = useTransition();
+  const toast = useToast();
   return (
     <section className="card p-4 flex flex-col gap-3">
       <div>
@@ -175,7 +177,7 @@ export function RulesPanel({ rules, categories }: { rules: Rule[]; categories: C
             <code className="font-mono text-[12px] bg-surface-2 rounded px-1.5 py-0.5">{r.pattern}</code>
             <span className="text-ink-3">→</span>
             <span className="flex-1">{r.kind === 'transfer' ? 'Transferência' : r.category_name ?? 'sem categoria'}</span>
-            <button className="text-ink-3 hover:text-bad text-[12px]" disabled={deleting} onClick={() => start(async () => { await deleteRule(r.id); })}>remover</button>
+            <button className="text-ink-3 hover:text-bad text-[12px]" disabled={deleting} onClick={() => start(async () => { const res = await deleteRule(r.id); if (res.rule) { const rule = res.rule; toast({ text: `Regra "${rule.pattern}" removida.`, action: { label: 'Desfazer', onClick: async () => { await restoreRule(rule); } } }); } else toast({ tone: 'bad', text: res.error ?? 'Erro.' }); })}>remover</button>
           </li>
         ))}
         {!rules.length ? <li className="py-2 text-ink-3">Nenhuma regra ainda.</li> : null}

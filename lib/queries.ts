@@ -234,13 +234,55 @@ export async function updateTransaction(id: number, patch: TxPatch, db: Queryabl
   return getTransaction(id, db);
 }
 
-export async function deleteTransaction(id: number, db: Queryable = pool): Promise<void> {
-  await db.query(`DELETE FROM transactions WHERE id = $1`, [id]);
+/** Linha crua da tabela (sem os joins), do jeito que volta de RETURNING *: serve pra desfazer uma exclusão. */
+export type TransactionRow = Record<string, unknown> & { id: number };
+
+export async function deleteTransaction(id: number, db: Queryable = pool): Promise<TransactionRow[]> {
+  const { rows } = await db.query<TransactionRow>(`DELETE FROM transactions WHERE id = $1 RETURNING *`, [id]);
+  return rows;
 }
 
-export async function deleteInstallmentGroup(group: string, fromN: number, db: Queryable = pool): Promise<number> {
-  const { rowCount } = await db.query(`DELETE FROM transactions WHERE installment_group = $1 AND installment_n >= $2`, [group, fromN]);
-  return rowCount ?? 0;
+export async function deleteInstallmentGroup(group: string, fromN: number, db: Queryable = pool): Promise<TransactionRow[]> {
+  const { rows } = await db.query<TransactionRow>(`DELETE FROM transactions WHERE installment_group = $1 AND installment_n >= $2 RETURNING *`, [group, fromN]);
+  return rows;
+}
+
+const TX_COLUMNS = [
+  'id', 'account_id', 'date', 'amount', 'description', 'category_id', 'kind', 'source', 'status', 'reviewed', 'fitid', 'statement_description',
+  'invoice_month', 'installment_group', 'installment_n', 'installment_total', 'notes', 'trip_id', 'trip_excluded', 'created_at',
+];
+
+/** Reinsere linhas apagadas com os mesmos ids (o "desfazer" da exclusão). */
+export async function restoreTransactions(rows: TransactionRow[], db: Queryable = pool): Promise<number> {
+  let n = 0;
+  for (const r of rows) {
+    const cols = TX_COLUMNS.filter((c) => c in r);
+    const values = cols.map((c) => r[c] ?? null);
+    const { rowCount } = await db.query(
+      `INSERT INTO transactions (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) ON CONFLICT (id) DO NOTHING`,
+      values,
+    );
+    n += rowCount ?? 0;
+  }
+  return n;
+}
+
+export type FrequentDescription = { key: string; description: string; n: number; category_id: number | null; account_id: number | null; amount: number };
+
+/** O que o usuário mais lança na mão (90 dias): vira chip na barra rápida e memória de categoria/conta. */
+export async function frequentDescriptions(db: Queryable = pool): Promise<FrequentDescription[]> {
+  const { rows } = await db.query<FrequentDescription>(
+    `SELECT lower(regexp_replace(description, '\\s*\\(\\d+/\\d+\\)$', '')) AS key,
+            MAX(regexp_replace(description, '\\s*\\(\\d+/\\d+\\)$', '')) AS description,
+            COUNT(*)::int AS n,
+            (array_agg(category_id ORDER BY date DESC))[1] AS category_id,
+            (array_agg(account_id ORDER BY date DESC))[1] AS account_id,
+            ABS((array_agg(amount ORDER BY date DESC))[1])::numeric AS amount
+     FROM transactions
+     WHERE source IN ('manual','chat') AND kind = 'expense' AND date >= CURRENT_DATE - 90
+     GROUP BY 1 HAVING COUNT(*) >= 2 ORDER BY n DESC LIMIT 30`,
+  );
+  return rows;
 }
 
 // ---------- Resumos ----------
@@ -395,8 +437,9 @@ export async function upsertSnapshot(input: { accountId: number; asset: string; 
   );
 }
 
-export async function deleteSnapshot(id: number, db: Queryable = pool) {
-  await db.query(`DELETE FROM investment_snapshots WHERE id = $1`, [id]);
+export async function deleteSnapshot(id: number, db: Queryable = pool): Promise<Snapshot | null> {
+  const { rows } = await db.query<Snapshot>(`DELETE FROM investment_snapshots WHERE id = $1 RETURNING *`, [id]);
+  return rows[0] ?? null;
 }
 
 export type NetWorthPoint = { month: string; total: number; contributions: number };

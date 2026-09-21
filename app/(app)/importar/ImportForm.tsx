@@ -10,6 +10,7 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
   const [state, action, pending] = useActionState(previewUpload, undefined);
   // o resultado só vale pra prévia que o gerou: uma nova prévia volta a mostrar a tabela
   const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number; forPreview: unknown } | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
   const [committing, start] = useTransition();
   const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
 
@@ -93,12 +94,15 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
             className="btn btn-primary self-end"
             disabled={committing || (s.preview.counts.match + s.preview.counts.new === 0)}
             onClick={() => start(async () => {
+              setCommitError(null);
               const r = await confirmImport(s.preview!.accountId, s.filename!, s.statement!, Boolean(s.invertSigns));
-              setResult({ ...r, forPreview: s.preview });
+              if (r.ok) setResult({ matched: r.matched, inserted: r.inserted, skipped: r.skipped, forPreview: s.preview });
+              else setCommitError(r.error);
             })}
           >
             {committing ? 'Importando...' : `Confirmar importação (${s.preview.counts.match + s.preview.counts.new})`}
           </button>
+          {commitError ? <p className="text-sm text-bad self-end">{commitError}</p> : null}
         </div>
       ) : null}
     </div>

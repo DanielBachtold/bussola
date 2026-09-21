@@ -23,9 +23,13 @@ export type QuickParse = {
  * Ordem importa: parcelas e datas saem da frase ANTES de procurar o valor, senão
  * "dia 15 almoço 42" viraria R$ 15.
  */
-export function quickParse(input: string, accounts: Account[], categories: Category[], rules: Rule[]): QuickParse | null {
+/** Último lançamento com a mesma descrição: de onde vêm categoria e conta quando a frase não diz. */
+export type QuickHistory = Map<string, { categoryId: number | null; accountId: number | null }>;
+
+export function quickParse(input: string, accounts: Account[], categories: Category[], rules: Rule[], history?: QuickHistory): QuickParse | null {
   const warnings: string[] = [];
-  let text = ` ${input.trim()} `;
+  // notificação do banco colada no campo: "Compra aprovada R$ 42,00 em PADARIA" vira "PADARIA R$ 42,00"
+  let text = ` ${input.trim().replace(/^(compra|pagamento)\s+(aprovad[ao]|realizad[ao]|confirmad[ao])(\s+de)?\s*/i, '').replace(/^voc[eê]\s+(fez|realizou)\s+(uma\s+)?(compra|pagamento)(\s+de)?\s*/i, '')} `;
   const today = todayISO();
 
   // parcelas: "em 3x", "3x", "3 vezes", "3 parcelas"
@@ -128,6 +132,12 @@ export function quickParse(input: string, accounts: Account[], categories: Categ
   if (!category && kind !== 'transfer') {
     const guess = guessCategory(description, kind);
     if (guess) category = categories.find((c) => normalizeText(c.name) === normalizeText(guess)) ?? null;
+  }
+  // histórico: mesma descrição lançada antes traz a categoria (e a conta, se a frase não citou nenhuma)
+  const past = history?.get(normalizeText(description));
+  if (past) {
+    if (!category && past.categoryId) category = categories.find((c) => c.id === past.categoryId) ?? null;
+    if (!candidates.length && !wantsCredit && !wantsDebit && past.accountId) account = active.find((a) => a.id === past.accountId) ?? account;
   }
 
   return { amount: signedAmount(amount, kind, direction, account), description, date, kind, direction, installments, account, category, warnings };

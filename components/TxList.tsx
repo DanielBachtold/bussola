@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { ArrowDownLeft, ArrowLeftRight, CircleDashed } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { formatDateShort, formatMonth } from '@/lib/dates';
 import type { Category, Transaction, Trip, TxKind } from '@/lib/types';
-import { editTransaction, removeTransaction, setCategory, setKind } from '@/app/actions/transactions';
+import { editTransaction, removeTransaction, setCategory, setKind, undoRemove, type ActionState } from '@/app/actions/transactions';
 import { setTransactionTrip } from '@/app/actions/trips';
+import { useToast } from './Toast';
 
 export type TxListContext = 'invoice' | 'trip';
 
@@ -44,8 +46,8 @@ function TxRow({ tx, categories, trips, compact, hideStatus, context }: { tx: Tr
   return (
     <li className="hairline first:border-t-0 min-w-0">
       <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-surface-2/60 -mx-2 px-2 rounded-md">
-        <span className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] shrink-0 ${noCategory ? 'bg-warn-bg text-warn font-semibold' : 'bg-surface-2'}`} aria-hidden title={noCategory ? 'sem categoria' : undefined}>
-          {tx.kind === 'transfer' ? '⇄' : tx.kind === 'income' ? '↓' : noCategory ? '?' : tx.category_icon ?? '·'}
+        <span className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] shrink-0 ${noCategory ? 'bg-warn-bg text-warn' : tx.kind === 'income' ? 'bg-good-bg text-good' : 'bg-surface-2 text-ink-3'}`} aria-hidden title={noCategory ? 'sem categoria' : undefined}>
+          {tx.kind === 'transfer' ? <ArrowLeftRight size={16} /> : tx.kind === 'income' ? <ArrowDownLeft size={16} /> : noCategory ? <CircleDashed size={16} /> : tx.category_icon ?? <CircleDashed size={16} />}
         </span>
         <span className="flex-1 min-w-0">
           <span className="block truncate text-[14px] font-medium">{tx.description}</span>
@@ -62,6 +64,21 @@ function TxRow({ tx, categories, trips, compact, hideStatus, context }: { tx: Tr
 }
 
 function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transaction; categories: Category[]; trips?: Trip[]; pending: boolean; start: (fn: () => Promise<void> | void) => void; close: () => void }) {
+  const toast = useToast();
+  // toda ação passa por aqui: erro vira aviso em vez de sumir, e o editor só fecha quando deu certo
+  const run = async (p: Promise<ActionState>, okText?: string, closeAfter = false) => {
+    const r = await p;
+    if (r.error) toast({ tone: 'bad', text: r.error });
+    else { if (okText) toast({ tone: 'good', text: okText }); if (closeAfter) close(); }
+    return r;
+  };
+  const remove = (wholeGroup: boolean) => start(async () => {
+    const r = await removeTransaction(tx.id, wholeGroup);
+    if (r.error || !r.removed) { toast({ tone: 'bad', text: r.error ?? 'Não foi possível excluir.' }); return; }
+    const rows = r.removed;
+    toast({ text: rows.length === 1 ? 'Lançamento excluído.' : `${rows.length} parcelas excluídas.`, action: { label: 'Desfazer', onClick: async () => { await undoRemove(rows); } } });
+    close();
+  });
   const [desc, setDesc] = useState(tx.description);
   const [amount, setAmount] = useState(String(Math.abs(tx.amount)).replace('.', ','));
   const [date, setDate] = useState(tx.date);
@@ -92,7 +109,7 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
           className="input !w-auto !py-1.5"
           value={tx.kind}
           disabled={pending}
-          onChange={(e) => start(async () => { await setKind(tx.id, e.target.value as TxKind, learn); })}
+          onChange={(e) => start(async () => { await run(setKind(tx.id, e.target.value as TxKind, learn)); })}
         >
           <option value="expense">Gasto</option>
           <option value="income">Receita</option>
@@ -103,7 +120,7 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
             className="input !w-auto !py-1.5"
             value={tx.category_id ?? ''}
             disabled={pending}
-            onChange={(e) => start(async () => { await setCategory(tx.id, e.target.value ? Number(e.target.value) : null, learn); })}
+            onChange={(e) => start(async () => { const r = await run(setCategory(tx.id, e.target.value ? Number(e.target.value) : null, learn)); if (r.applied) toast({ tone: 'good', text: `Categorizado, e mais ${r.applied} ${r.applied === 1 ? 'igual' : 'iguais'}.` }); })}
           >
             <option value="">Sem categoria</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>)}
@@ -118,13 +135,13 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
       {trips?.length && tx.kind === 'expense' ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-ink-3">Viagem</span>
-          <select className="input !w-auto !py-1.5" value={tx.trip_id ?? ''} disabled={pending} onChange={(e) => start(async () => { await setTransactionTrip(tx.id, e.target.value ? Number(e.target.value) : null, tx.trip_excluded); })}>
+          <select className="input !w-auto !py-1.5" value={tx.trip_id ?? ''} disabled={pending} onChange={(e) => start(async () => { await run(setTransactionTrip(tx.id, e.target.value ? Number(e.target.value) : null, tx.trip_excluded)); })}>
             <option value="">Nenhuma</option>
             {trips.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
           {tx.trip_id ? (
             <label className="flex items-center gap-1.5 text-ink-2">
-              <input type="checkbox" checked={tx.trip_excluded} disabled={pending} onChange={(e) => start(async () => { await setTransactionTrip(tx.id, tx.trip_id, e.target.checked); })} /> fora do teto (pré-pago)
+              <input type="checkbox" checked={tx.trip_excluded} disabled={pending} onChange={(e) => start(async () => { await run(setTransactionTrip(tx.id, tx.trip_id, e.target.checked)); })} /> fora do teto (pré-pago)
             </label>
           ) : null}
         </div>
@@ -134,7 +151,7 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
           <button
             className="btn btn-primary btn-sm"
             disabled={pending}
-            onClick={() => start(async () => { await editTransaction(tx.id, { description: desc, amount, date }); close(); })}
+            onClick={() => start(async () => { await run(editTransaction(tx.id, { description: desc, amount, date }), 'Salvo.', true); })}
           >
             Salvar
           </button>
@@ -142,11 +159,11 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
         </div>
         <div className="flex gap-2">
           {tx.installment_group ? (
-            <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => { if (confirm('Excluir esta e as parcelas seguintes?')) start(async () => { await removeTransaction(tx.id, true); }); }}>
+            <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(true)}>
               Excluir parcelas
             </button>
           ) : null}
-          <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => { if (confirm('Excluir este lançamento?')) start(async () => { await removeTransaction(tx.id); }); }}>
+          <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(false)}>
             Excluir
           </button>
         </div>

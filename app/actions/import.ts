@@ -53,9 +53,13 @@ export async function previewUpload(_prev: PreviewState | undefined, formData: F
   }
 }
 
-export async function confirmImport(accountId: number, filename: string, statement: ParsedStatement, invertSigns: boolean) {
+export async function confirmImport(accountId: number, filename: string, statement: ParsedStatement, invertSigns: boolean): Promise<{ ok: true; matched: number; inserted: number; skipped: number; importId: number } | { ok: false; error: string }> {
   await requireSession();
-  const result = await commitImport(accountId, filename, statement, invertSigns);
-  for (const p of ['/', '/transacoes', '/faturas', '/revisar', '/importar']) revalidatePath(p);
-  return result;
+  try {
+    const result = await commitImport(accountId, filename, statement, invertSigns);
+    for (const p of ['/', '/transacoes', '/faturas', '/revisar', '/importar', '/viagens']) revalidatePath(p);
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Erro ao importar.' };
+  }
 }

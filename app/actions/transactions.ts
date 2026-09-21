@@ -8,7 +8,8 @@ import { quickParse, signedAmount } from '@/lib/quickparse';
 import { isValidISO } from '@/lib/dates';
 import { listRules, patternFromDescription, upsertRule } from '@/lib/rules';
 import {
-  createTransaction, deleteInstallmentGroup, deleteTransaction, getTransaction, listAccounts, listCategories, updateTransaction,
+  createTransaction, deleteInstallmentGroup, deleteTransaction, getTransaction, listAccounts, listCategories, restoreTransactions, updateTransaction,
+  type TransactionRow,
 } from '@/lib/queries';
 import type { TxKind } from '@/lib/types';
 
@@ -16,7 +17,7 @@ function revalidateAll() {
   for (const p of ['/', '/transacoes', '/faturas', '/revisar', '/lancar', '/investimentos']) revalidatePath(p);
 }
 
-export type ActionState = { ok?: boolean; error?: string; message?: string };
+export type ActionState = { ok?: boolean; error?: string; message?: string; ids?: number[]; removed?: TransactionRow[]; applied?: number };
 
 /** Lançamento pela barra rápida: a frase já foi interpretada no cliente e confirmada. */
 export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null; tripId?: number | null; date?: string }): Promise<ActionState> {
@@ -61,7 +62,7 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
   revalidateAll();
   const first = created[0];
   const trip = first.trip_name ? ` na viagem ${first.trip_name}` : '';
-  return { ok: true, message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${trip}${mirror}.` };
+  return { ok: true, ids: created.map((t) => t.id), message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${trip}${mirror}.` };
 }
 
 export async function addTransaction(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
@@ -158,14 +159,23 @@ export async function editTransaction(id: number, patch: { date?: string; amount
   }
 }
 
+/** Exclui e devolve as linhas apagadas, pra tela oferecer "desfazer". */
 export async function removeTransaction(id: number, wholeGroup = false): Promise<ActionState> {
   await requireSession();
   const tx = await getTransaction(id);
   if (!tx) return { error: 'Lançamento não encontrado.' };
-  if (wholeGroup && tx.installment_group) await deleteInstallmentGroup(tx.installment_group, tx.installment_n ?? 1);
-  else await deleteTransaction(id);
+  const removed = wholeGroup && tx.installment_group
+    ? await deleteInstallmentGroup(tx.installment_group, tx.installment_n ?? 1)
+    : await deleteTransaction(id);
   revalidateAll();
-  return { ok: true };
+  return { ok: true, removed };
+}
+
+export async function undoRemove(rows: TransactionRow[]): Promise<ActionState> {
+  await requireSession();
+  const n = await restoreTransactions(rows);
+  revalidateAll();
+  return { ok: true, message: n === 1 ? 'Lançamento restaurado.' : `${n} lançamentos restaurados.` };
 }
 
 /** Confirma que um lançamento manual aconteceu mesmo sem aparecer no extrato (ex.: dinheiro vivo). */

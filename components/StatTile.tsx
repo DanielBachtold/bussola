@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 
 export function StatTile({
@@ -21,7 +22,7 @@ export function StatTile({
       </span>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-ink-2 min-h-[18px] leading-tight">
         {delta && Math.abs(delta.pct) >= 0.005 ? (
-          <span className={`pill whitespace-nowrap ${deltaTone}`}>{delta.pct > 0 ? '▲' : '▼'} {Math.abs(Math.round(delta.pct * 100))}%</span>
+          <span className={`pill whitespace-nowrap ${deltaTone}`}>{delta.pct > 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{Math.abs(Math.round(delta.pct * 100))}%</span>
         ) : null}
         {hint ? <span className="line-clamp-2">{hint}</span> : null}
       </div>

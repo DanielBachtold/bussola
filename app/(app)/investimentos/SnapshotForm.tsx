@@ -1,7 +1,8 @@
 'use client';
 
 import { useActionState, useTransition } from 'react';
-import { removeSnapshot, saveSnapshot } from '@/app/actions/investments';
+import { removeSnapshot, restoreSnapshot, saveSnapshot } from '@/app/actions/investments';
+import { useToast } from '@/components/Toast';
 import { formatBRL } from '@/lib/money';
 import { formatMonth } from '@/lib/dates';
 import type { Account, Snapshot } from '@/lib/types';
@@ -36,6 +37,7 @@ export function SnapshotForm({ accounts, defaultMonth, knownAssets }: { accounts
 
 export function SnapshotTable({ snapshots }: { snapshots: Snapshot[] }) {
   const [pending, start] = useTransition();
+  const toast = useToast();
   if (!snapshots.length) return <p className="text-sm text-ink-3">Nenhuma posição registrada.</p>;
   return (
     <table className="w-full text-[13px]">
@@ -47,7 +49,7 @@ export function SnapshotTable({ snapshots }: { snapshots: Snapshot[] }) {
             <td className="py-1.5">{s.account_name}</td>
             <td className="py-1.5">{s.asset}{s.asset_class ? <span className="text-ink-3"> · {s.asset_class}</span> : null}</td>
             <td className="py-1.5 text-right tabular">{formatBRL(s.balance)}</td>
-            <td className="py-1.5 text-right"><button className="text-bad text-[12px]" disabled={pending} onClick={() => { if (confirm('Remover?')) start(async () => { await removeSnapshot(s.id); }); }}>remover</button></td>
+            <td className="py-1.5 text-right"><button className="text-bad text-[12px]" disabled={pending} onClick={() => start(async () => { const r = await removeSnapshot(s.id); if (r.snapshot) { const snap = r.snapshot; toast({ text: 'Posição removida.', action: { label: 'Desfazer', onClick: async () => { await restoreSnapshot(snap); } } }); } else toast({ tone: 'bad', text: r.error ?? 'Erro.' }); })}>remover</button></td>
           </tr>
         ))}
       </tbody>

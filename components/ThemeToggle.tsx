@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
+import { Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
 
 export type Theme = 'system' | 'light' | 'dark';
 const KEY = 'bussola-theme';
@@ -38,20 +39,21 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
     window.dispatchEvent(new Event(EVENT));
   }
 
-  const options: Array<[Theme, string, string]> = [['system', 'Auto', '◐'], ['light', 'Claro', '☀'], ['dark', 'Escuro', '☾']];
+  const options: Array<[Theme, string, LucideIcon]> = [['system', 'Auto', Monitor], ['light', 'Claro', Sun], ['dark', 'Escuro', Moon]];
   return (
     <div role="radiogroup" aria-label="Tema" className={`inline-flex rounded-lg bg-surface-2 p-0.5 ${compact ? '' : 'w-full'}`}>
-      {options.map(([t, label, icon]) => (
+      {options.map(([t, label, Icon]) => (
         <button
           key={t}
           type="button"
           role="radio"
           aria-checked={theme === t}
           onClick={() => choose(t)}
-          className={`flex-1 rounded-md px-1 py-1 text-[12px] font-medium whitespace-nowrap transition-colors ${theme === t ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}
+          className={`flex-1 inline-flex items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium whitespace-nowrap transition-colors ${theme === t ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}
           title={label}
+          aria-label={label}
         >
-          <span aria-hidden className="mr-1">{icon}</span>{compact ? '' : label}
+          <Icon size={14} strokeWidth={1.75} aria-hidden />{compact ? '' : label}
         </button>
       ))}
     </div>

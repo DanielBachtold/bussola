@@ -23,9 +23,18 @@ export async function saveSnapshot(_prev: ActionState | undefined, formData: For
   }
 }
 
-export async function removeSnapshot(id: number): Promise<ActionState> {
+export async function removeSnapshot(id: number): Promise<ActionState & { snapshot?: { accountId: number; asset: string; assetClass: string | null; month: string; balance: number } }> {
   await requireSession();
-  await deleteSnapshot(id);
+  const row = await deleteSnapshot(id);
   revalidatePath('/investimentos');
+  revalidatePath('/');
+  return row ? { ok: true, snapshot: { accountId: row.account_id, asset: row.asset, assetClass: row.asset_class, month: row.month, balance: row.balance } } : { error: 'Posição não encontrada.' };
+}
+
+export async function restoreSnapshot(s: { accountId: number; asset: string; assetClass: string | null; month: string; balance: number }): Promise<ActionState> {
+  await requireSession();
+  await upsertSnapshot(s);
+  revalidatePath('/investimentos');
+  revalidatePath('/');
   return { ok: true };
 }

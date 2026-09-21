@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { TopAlert } from './BudgetBars';
 
 /**
@@ -23,7 +24,7 @@ export function TopAlerts({ alerts }: { alerts: TopAlert[] }) {
       href={single?.href ?? '/#orcamento'}
       className={`flex items-center gap-2 rounded-lg px-3 py-2 mb-4 text-[13px] leading-snug ${tone === 'bad' ? 'bg-bad-bg text-bad' : 'bg-warn-bg text-warn'}`}
     >
-      <span aria-hidden>{tone === 'bad' ? '⚠' : '◔'}</span>
+      {tone === 'bad' ? <TriangleAlert size={16} className="shrink-0" aria-hidden /> : <CircleAlert size={16} className="shrink-0" aria-hidden />}
       <span className="flex-1 min-w-0 truncate">{text}</span>
       <span className="shrink-0 underline underline-offset-2">ver</span>
     </Link>

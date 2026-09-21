@@ -5,6 +5,7 @@ import { logout } from '@/app/actions/auth';
 import { getBudgetStatus } from '@/lib/budget';
 import { tripAlerts } from '@/lib/trips';
 import { TopAlerts } from '@/components/TopAlerts';
+import { ToastProvider } from '@/components/Toast';
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   await requireSession();
@@ -16,21 +17,22 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
     ...trips.map((a, i) => ({ key: `t${i}`, tone: a.tone, title: a.title, detail: a.detail, href: a.href })),
   ];
 
-  // mobile: true = aparece na barra inferior (4 itens + "Mais")
+  // mobile: true = barra inferior (Lançar vira o botão central); o resto vai pro "Mais"
   const items: NavItem[] = [
-    { href: '/', label: 'Painel', icon: '◎', mobile: true },
-    { href: '/lancar', label: 'Lançar', icon: '＋', mobile: true },
-    { href: '/transacoes', label: 'Lançamentos', icon: '☰', mobile: true },
-    { href: '/revisar', label: 'Revisar', icon: '✓', badge: pending, mobile: true },
-    { href: '/chat', label: 'Chat', icon: '✦' },
-    { href: '/faturas', label: 'Faturas', icon: '▤' },
-    { href: '/viagens', label: 'Viagens', icon: '✈' },
-    { href: '/investimentos', label: 'Investimentos', icon: '◆' },
-    { href: '/importar', label: 'Importar extrato', icon: '⇪' },
-    { href: '/config', label: 'Configurações', icon: '⚙' },
+    { href: '/', label: 'Painel', icon: 'painel', mobile: true },
+    { href: '/transacoes', label: 'Lançamentos', icon: 'lancamentos', mobile: true },
+    { href: '/lancar', label: 'Lançar', icon: 'lancar', mobile: true },
+    { href: '/revisar', label: 'Revisar', icon: 'revisar', badge: pending, mobile: true },
+    { href: '/faturas', label: 'Faturas', icon: 'faturas' },
+    { href: '/chat', label: 'Chat', icon: 'chat' },
+    { href: '/viagens', label: 'Viagens', icon: 'viagens' },
+    { href: '/investimentos', label: 'Investimentos', icon: 'investimentos' },
+    { href: '/importar', label: 'Importar extrato', icon: 'importar' },
+    { href: '/config', label: 'Configurações', icon: 'config' },
   ];
 
   return (
+    <ToastProvider>
     <div className="min-h-full md:pl-56">
       <Nav items={items} onLogout={logout} />
       <main className="mx-auto w-full max-w-6xl px-4 py-5 md:px-8 md:py-8 pb-24 md:pb-10 overflow-x-clip" style={{ paddingTop: 'max(20px, env(safe-area-inset-top))' }}>
@@ -38,5 +40,6 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
         {children}
       </main>
     </div>
+    </ToastProvider>
   );
 }
