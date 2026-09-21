@@ -355,6 +355,23 @@ export async function categoryAverages(month: string, months = 3, db: Queryable 
   return new Map(rows.map((r) => [r.category_id, r.total]));
 }
 
+export type CategoryMonth = { category_id: number | null; name: string; icon: string | null; group_id: number | null; month: string; total: number };
+
+/** Gasto por categoria em cada um dos últimos N meses (viagens fora, como no orçamento). */
+export async function categoryMonths(months = 6, db: Queryable = pool): Promise<{ months: string[]; rows: CategoryMonth[] }> {
+  const first = monthStart(addMonths(currentMonth(), -(months - 1)));
+  const { rows } = await db.query<CategoryMonth>(
+    `SELECT t.category_id, COALESCE(c.name, 'Sem categoria') AS name, c.icon, c.group_id,
+            to_char(date_trunc('month', t.date), 'YYYY-MM') AS month, ABS(SUM(t.amount))::numeric AS total
+     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+     WHERE t.kind = 'expense' AND t.date >= $1
+     GROUP BY 1, 2, 3, 4, 5`,
+    [first],
+  );
+  const list = Array.from({ length: months }, (_, i) => addMonths(first, i));
+  return { months: list, rows };
+}
+
 export type MonthPoint = { month: string; expense: number; income: number };
 
 export async function monthlySeries(months = 12, db: Queryable = pool): Promise<MonthPoint[]> {

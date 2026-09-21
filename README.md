@@ -14,6 +14,9 @@ Sistema de finanças pessoais para quem quer saber onde o dinheiro está indo se
 - **Fixos previstos**: aluguel, financiamento, faculdade, assinaturas cadastrados uma vez. Viram lançamento no dia certo (pendente até o extrato confirmar), são descontados do "livre pra gastar" antes de cair e aparecem na seção "próximos 30 dias" do painel, junto com faturas, viagem e meta de aporte.
 - **Investimentos**: posição do mês pré-preenchida com os ativos do mês anterior (um salvar só), evolução do patrimônio contra aportes acumulados, alocação por ativo e classe.
 - **Chat**: funciona em dois modos. Sem chave de IA, entende um conjunto de perguntas frequentes sobre os números e sobre o sistema ("quanto gastei com uber em agosto", "qual a fatura aberta", "como funciona a conciliação") e responde direto do banco, sem custo. Com `ANTHROPIC_API_KEY`, usa o Claude com ferramentas: responde qualquer pergunta consultando seus dados (nunca inventa número) e registra lançamentos por conversa. A API da Anthropic é paga por uso.
+- **Categorias mês a mês**: mapa de calor dos últimos 6 meses com a variação contra a média.
+- **Faturas**: pagamento registrado nas duas contas, fatura marcada como paga, limite disponível, gasto da fatura por categoria.
+- **Exportar**: lançamentos em CSV e backup completo em JSON, direto de Configurações.
 - **Tema claro, escuro ou automático**, salvo no navegador.
 
 ## Stack

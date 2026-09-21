@@ -4,17 +4,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
-  ClipboardCheck, CreditCard, Ellipsis, LayoutDashboard, List, LogOut, MessageSquare, Plane, Plus, Settings, TrendingUp, Upload,
+  ClipboardCheck, CreditCard, Ellipsis, Grid2x2, LayoutDashboard, List, LogOut, MessageSquare, Plane, Plus, Settings, TrendingUp, Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
-export type NavIcon = 'painel' | 'lancar' | 'chat' | 'lancamentos' | 'revisar' | 'faturas' | 'viagens' | 'investimentos' | 'importar' | 'config';
+export type NavIcon = 'painel' | 'lancar' | 'chat' | 'lancamentos' | 'revisar' | 'faturas' | 'categorias' | 'viagens' | 'investimentos' | 'importar' | 'config';
 export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number; mobile?: boolean };
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   painel: LayoutDashboard, lancar: Plus, chat: MessageSquare, lancamentos: List, revisar: ClipboardCheck,
-  faturas: CreditCard, viagens: Plane, investimentos: TrendingUp, importar: Upload, config: Settings,
+  faturas: CreditCard, categorias: Grid2x2, viagens: Plane, investimentos: TrendingUp, importar: Upload, config: Settings,
 };
 
 export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Promise<void> }) {

@@ -25,8 +25,16 @@ export default async function ConfigPage() {
       <AccountsPanel accounts={accounts} />
       <RecurringPanel rules={recurring} accounts={accounts.filter((a) => !a.archived)} categories={categories} />
       <BudgetPanel status={status} groups={groups} categories={categories} monthlyIncome={income ?? ''} threshold={Number(threshold ?? 80)} />
-      <CategoriesPanel categories={categories} />
+      <CategoriesPanel categories={categories} groups={groups} />
       <RulesPanel rules={rules} categories={categories} />
+      <section className="card p-4 flex flex-col gap-2">
+        <h2 className="font-semibold">Exportar</h2>
+        <p className="text-[13px] text-ink-2">Seus dados são seus. O CSV abre no Excel ou no Sheets; o JSON é um backup completo de todas as tabelas.</p>
+        <div className="flex flex-wrap gap-2">
+          <a href="/api/export?format=csv" className="btn btn-ghost btn-sm" download>Lançamentos em CSV</a>
+          <a href="/api/export?format=json" className="btn btn-ghost btn-sm" download>Backup completo (JSON)</a>
+        </div>
+      </section>
     </div>
   );
 }

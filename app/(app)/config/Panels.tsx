@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from 'react';
 import { archiveAccount, deleteCategory, deleteRule, restoreRule, saveAccount, saveCategory, saveRule } from '@/app/actions/config';
 import { useToast } from '@/components/Toast';
 import { formatBRL } from '@/lib/money';
-import { KIND_LABEL, type Account, type Category, type Rule } from '@/lib/types';
+import { KIND_LABEL, type Account, type BudgetGroup, type Category, type Rule } from '@/lib/types';
 
 export function AccountsPanel({ accounts }: { accounts: Account[] }) {
   const [editing, setEditing] = useState<Account | 'new' | null>(null);
@@ -82,17 +82,17 @@ function AccountForm({ account, close }: { account: Account | null; close: () =>
   );
 }
 
-export function CategoriesPanel({ categories }: { categories: Category[] }) {
+export function CategoriesPanel({ categories, groups = [] }: { categories: Category[]; groups?: BudgetGroup[] }) {
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
   const [pending, start] = useTransition();
-  const groups: Array<['expense' | 'income', string]> = [['expense', 'Gastos'], ['income', 'Receitas']];
+  const kinds: Array<['expense' | 'income', string]> = [['expense', 'Gastos'], ['income', 'Receitas']];
   return (
     <section className="card p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Categorias</h2>
         <button className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>Nova categoria</button>
       </div>
-      {groups.map(([k, label]) => (
+      {kinds.map(([k, label]) => (
         <div key={k}>
           <p className="text-[12px] uppercase tracking-wide text-ink-3 font-medium mb-1">{label}</p>
           <ul className="flex flex-wrap gap-2">
@@ -105,12 +105,12 @@ export function CategoriesPanel({ categories }: { categories: Category[] }) {
           </ul>
         </div>
       ))}
-      {editing ? <CategoryForm key={editing === 'new' ? 'new' : editing.id} category={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
+      {editing ? <CategoryForm key={editing === 'new' ? 'new' : editing.id} category={editing === 'new' ? null : editing} groups={groups} close={() => setEditing(null)} /> : null}
     </section>
   );
 }
 
-function CategoryForm({ category, close }: { category: Category | null; close: () => void }) {
+function CategoryForm({ category, groups, close }: { category: Category | null; groups: BudgetGroup[]; close: () => void }) {
   const [state, action, pending] = useActionState(async (prev: Awaited<ReturnType<typeof saveCategory>> | undefined, fd: FormData) => {
     const r = await saveCategory(prev, fd);
     if (r.ok) close();
@@ -132,8 +132,16 @@ function CategoryForm({ category, close }: { category: Category | null; close: (
         </select>
       </label>
       <label className="flex flex-col gap-1 text-ink-3 col-span-2">Orçamento mensal (opcional)
-        <input name="budget" className="input tabular" inputMode="decimal" defaultValue={category?.budget ?? ''} placeholder="ex.: 800" />
+        <input name="budget" className="input" inputMode="decimal" defaultValue={category?.budget ?? ''} placeholder="ex.: 800" />
       </label>
+      {groups.length ? (
+        <label className="flex flex-col gap-1 text-ink-3 col-span-2">Grupo do orçamento
+          <select name="group_id" className="input" defaultValue={category?.group_id ?? ''}>
+            <option value="">Fora do orçamento por percentual</option>
+            {groups.filter((g) => g.basis === 'expense').map((g) => <option key={g.id} value={g.id}>{g.name} · {g.percent}%</option>)}
+          </select>
+        </label>
+      ) : null}
       <label className="flex items-center gap-2 text-ink-2 col-span-2">
         <input type="checkbox" name="fixed" defaultChecked={category?.fixed ?? false} />
         Conta fixa: continua vindo mesmo em viagem (financiamento, faculdade, aluguel). Não entra no teto de viagens.

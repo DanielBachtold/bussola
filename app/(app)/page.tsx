@@ -200,7 +200,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         </div>
         <div className="card p-4 lg:col-span-3 flex flex-col gap-3 min-w-0">
           <h2 className="font-semibold">Ritmo do mês <span className="text-ink-3 font-normal text-[13px]">gasto acumulado por dia</span></h2>
-          <CumulativeChart data={daily} currentLabel={formatMonth(month)} previousLabel={formatMonth(prevMonth)} />
+          <CumulativeChart data={daily} currentLabel={formatMonth(month)} previousLabel={formatMonth(prevMonth)} ceiling={hasBudget ? limitSum : null} />
         </div>
       </section>
 

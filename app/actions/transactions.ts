@@ -227,3 +227,40 @@ export async function confirmWithoutStatement(id: number): Promise<ActionState> 
   revalidateAll();
   return { ok: true };
 }
+
+/** Candidatos do extrato pra casar na mão com um lançamento manual: mesma conta, ±10 dias, valor parecido. */
+export async function matchCandidates(manualId: number): Promise<{ id: number; date: string; amount: number; description: string }[]> {
+  await requireSession();
+  const tx = await getTransaction(manualId);
+  if (!tx) return [];
+  const { rows } = await pool.query<{ id: number; date: string; amount: number; description: string }>(
+    `SELECT id, date, amount, description FROM transactions
+     WHERE account_id = $1 AND source = 'import' AND status = 'imported' AND id <> $2
+       AND date BETWEEN $3::date - INTERVAL '10 days' AND $3::date + INTERVAL '10 days'
+       AND SIGN(amount) = SIGN($4::numeric) AND ABS(ABS(amount) - ABS($4::numeric)) <= GREATEST(ABS($4::numeric) * 0.25, 5)
+     ORDER BY ABS(ABS(amount) - ABS($4::numeric)), ABS(date - $3::date) LIMIT 8`,
+    [tx.account_id, manualId, tx.date, tx.amount],
+  );
+  return rows;
+}
+
+/**
+ * "Era esta linha": o lançamento manual fica (descrição e categoria do usuário),
+ * herda data, valor, fitid e texto do extrato da linha importada, que some.
+ */
+export async function matchManually(manualId: number, importedId: number): Promise<ActionState> {
+  await requireSession();
+  const [manual, imported] = await Promise.all([getTransaction(manualId), getTransaction(importedId)]);
+  if (!manual || !imported) return { error: 'Lançamento não encontrado.' };
+  if (manual.account_id !== imported.account_id) return { error: 'As duas linhas precisam ser da mesma conta.' };
+  await withTransaction(async (db) => {
+    await db.query(`DELETE FROM transactions WHERE id = $1`, [importedId]);
+    await db.query(
+      `UPDATE transactions SET status = 'reconciled', fitid = $2, statement_description = $3, date = $4, amount = $5, invoice_month = $6, reviewed = TRUE,
+              category_id = COALESCE(category_id, $7), updated_at = NOW() WHERE id = $1`,
+      [manualId, imported.fitid, imported.statement_description ?? imported.description, imported.date, imported.amount, imported.invoice_month, imported.category_id],
+    );
+  });
+  revalidateAll();
+  return { ok: true, message: 'Conciliado.' };
+}

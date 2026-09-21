@@ -27,6 +27,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
     { href: '/lancar', label: 'Lançar', icon: 'lancar', mobile: true },
     { href: '/revisar', label: 'Revisar', icon: 'revisar', badge: pending, mobile: true },
     { href: '/faturas', label: 'Faturas', icon: 'faturas' },
+    { href: '/categorias', label: 'Categorias', icon: 'categorias' },
     { href: '/chat', label: 'Chat', icon: 'chat' },
     { href: '/viagens', label: 'Viagens', icon: 'viagens' },
     { href: '/investimentos', label: 'Investimentos', icon: 'investimentos' },
