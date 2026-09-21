@@ -1,14 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { pool, withTransaction } from '@/lib/db';
+import { pool, withTransaction, type Queryable } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { parseAmount } from '@/lib/money';
 import { quickParse, signedAmount } from '@/lib/quickparse';
 import { isValidISO } from '@/lib/dates';
 import { listRules, patternFromDescription, upsertRule } from '@/lib/rules';
 import {
-  createTransaction, deleteInstallmentGroup, deleteTransaction, getTransaction, listAccounts, listCategories, restoreTransactions, updateTransaction,
+  accentInsensitiveRegex, createTransaction, deleteInstallmentGroup, deleteTransaction, getTransaction, listAccounts, listCategories, restoreTransactions, updateTransaction,
   type TransactionRow,
 } from '@/lib/queries';
 import type { TxKind } from '@/lib/types';
@@ -97,15 +97,35 @@ export async function addTransaction(_prev: ActionState | undefined, formData: F
   }
 }
 
+/**
+ * Regra recém-aprendida aplicada ao que ainda está na fila de revisão com o mesmo
+ * padrão: "UBER *TRIP" cinco vezes vira um toque só. Devolve quantos foram.
+ */
+async function applyRuleToQueue(db: Queryable, pattern: string, exceptId: number, categoryId: number | null, kind: TxKind | null): Promise<number> {
+  // mesma fronteira de palavra do applyRules, ignorando acentos dos dois lados
+  const re = `(^|[^[:alnum:]])${accentInsensitiveRegex(pattern)}([^[:alnum:]]|$)`;
+  const { rowCount } = await db.query(
+    `UPDATE transactions SET category_id = COALESCE($3, category_id), kind = COALESCE($4, kind), reviewed = TRUE, updated_at = NOW()
+     WHERE reviewed = FALSE AND id <> $1 AND category_id IS NULL
+       AND coalesce(statement_description, description) ~* $2`,
+    [exceptId, re, categoryId, kind],
+  );
+  return rowCount ?? 0;
+}
+
 export async function setCategory(id: number, categoryId: number | null, learn: boolean): Promise<ActionState> {
   await requireSession();
   const tx = await getTransaction(id);
   if (!tx) return { error: 'Lançamento não encontrado.' };
+  let applied = 0;
   await withTransaction(async (db) => {
     await updateTransaction(id, { categoryId, reviewed: true }, db);
     if (learn && categoryId) {
       const pattern = patternFromDescription(tx.statement_description ?? tx.description);
-      if (pattern) await upsertRule(db, pattern, categoryId, null);
+      if (pattern) {
+        await upsertRule(db, pattern, categoryId, null);
+        applied = await applyRuleToQueue(db, pattern, id, categoryId, null);
+      }
     }
     // aplica nas demais parcelas do mesmo grupo
     if (tx.installment_group) {
@@ -113,7 +133,7 @@ export async function setCategory(id: number, categoryId: number | null, learn: 
     }
   });
   revalidateAll();
-  return { ok: true };
+  return { ok: true, applied };
 }
 
 export async function setKind(id: number, kind: TxKind, learn: boolean): Promise<ActionState> {
@@ -122,15 +142,27 @@ export async function setKind(id: number, kind: TxKind, learn: boolean): Promise
   if (!tx) return { error: 'Lançamento não encontrado.' };
   // trocar o tipo corrige o sinal: gasto sempre sai, receita sempre entra; transferência mantém
   const amount = kind === 'expense' ? -Math.abs(tx.amount) : kind === 'income' ? Math.abs(tx.amount) : tx.amount;
+  let applied = 0;
   await withTransaction(async (db) => {
     await updateTransaction(id, { kind, amount, reviewed: true, categoryId: kind === 'transfer' ? null : tx.category_id }, db);
     if (learn && kind === 'transfer') {
       const pattern = patternFromDescription(tx.statement_description ?? tx.description);
-      if (pattern) await upsertRule(db, pattern, null, 'transfer');
+      if (pattern) {
+        await upsertRule(db, pattern, null, 'transfer');
+        applied = await applyRuleToQueue(db, pattern, id, null, 'transfer');
+      }
     }
   });
   revalidateAll();
-  return { ok: true };
+  return { ok: true, applied };
+}
+
+/** Marca tudo que sobrou na fila como revisado, sem mexer em categoria. */
+export async function markAllReviewed(): Promise<ActionState> {
+  await requireSession();
+  const { rowCount } = await pool.query(`UPDATE transactions SET reviewed = TRUE, updated_at = NOW() WHERE reviewed = FALSE`);
+  revalidateAll();
+  return { ok: true, applied: rowCount ?? 0, message: `${rowCount ?? 0} marcados como revisados.` };
 }
 
 export async function markReviewed(id: number): Promise<ActionState> {

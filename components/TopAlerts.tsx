@@ -18,7 +18,7 @@ export function TopAlerts({ alerts }: { alerts: TopAlert[] }) {
   const single = alerts.length === 1 ? alerts[0] : null;
   const text = single
     ? `${single.title}: ${single.detail}`
-    : `${bad.length || alerts.length} ${bad.length ? `grupo${bad.length > 1 ? 's' : ''} passou do limite` : 'alertas de orçamento'}`;
+    : bad.length ? (bad.length === 1 ? `${bad[0].title}` : `${bad.length} grupos passaram do limite`) : `${alerts.length} alertas de orçamento`;
   return (
     <Link
       href={single?.href ?? '/#orcamento'}

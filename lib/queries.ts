@@ -406,6 +406,8 @@ export async function futureCommitments(accountId?: number, db: Queryable = pool
 
 export async function pendingReview(db: Queryable = pool) {
   const unreviewed = await listTransactions({ reviewed: false, limit: 300 }, db);
+  const { rows: totalRows } = await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM transactions WHERE reviewed = FALSE`);
+  const total = totalRows[0]?.n ?? 0;
   // lançamentos manuais que já deveriam ter aparecido em algum extrato importado
   const { rows: unmatched } = await db.query<Transaction>(
     `${TX_SELECT}
@@ -415,7 +417,22 @@ export async function pendingReview(db: Queryable = pool) {
        )
      ORDER BY t.date DESC LIMIT 300`,
   );
-  return { unreviewed, unmatched };
+  return { unreviewed, unmatched, total };
+}
+
+/** As categorias mais usadas em cada conta nos últimos 90 dias: viram chips na revisão. */
+export async function topCategoriesByAccount(limit = 3, db: Queryable = pool): Promise<Record<number, number[]>> {
+  const { rows } = await db.query<{ account_id: number; category_id: number; n: number }>(
+    `SELECT account_id, category_id, COUNT(*)::int AS n FROM transactions
+     WHERE kind = 'expense' AND category_id IS NOT NULL AND date >= CURRENT_DATE - 90
+     GROUP BY 1, 2 ORDER BY 1, 3 DESC`,
+  );
+  const out: Record<number, number[]> = {};
+  for (const r of rows) {
+    out[r.account_id] ??= [];
+    if (out[r.account_id].length < limit) out[r.account_id].push(r.category_id);
+  }
+  return out;
 }
 
 // ---------- Investimentos ----------

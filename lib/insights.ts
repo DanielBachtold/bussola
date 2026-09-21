@@ -7,6 +7,7 @@ export type Insight = {
   tone: 'good' | 'warning' | 'neutral';
   title: string;
   detail: string;
+  icon?: string | null;
 };
 
 /**
@@ -24,26 +25,6 @@ export async function computeInsights(month: string = currentMonth(), db: Querya
   const avg = await categoryAverages(month, 3, db);
   const prevTotals = await monthTotals(addMonths(month, -1), db);
 
-  // projeção do mês
-  if (isCurrent && totals.expense > 0) {
-    const day = Number(today.slice(8, 10));
-    const days = Number(end.slice(8, 10));
-    const projected = (totals.expense / day) * days;
-    const avgTotal = [...avg.values()].reduce((a, b) => a + b, 0);
-    if (avgTotal > 0) {
-      const diff = (projected - avgTotal) / avgTotal;
-      out.push({
-        tone: diff > 0.1 ? 'warning' : diff < -0.1 ? 'good' : 'neutral',
-        title: `Projeção de ${formatBRL(projected)} para o mês`,
-        detail: diff > 0.1
-          ? `No ritmo atual, ${Math.round(diff * 100)}% acima da média dos últimos 3 meses (${formatBRL(avgTotal)}).`
-          : diff < -0.1
-            ? `No ritmo atual, ${Math.round(-diff * 100)}% abaixo da média dos últimos 3 meses (${formatBRL(avgTotal)}).`
-            : `Em linha com a média dos últimos 3 meses (${formatBRL(avgTotal)}).`,
-      });
-    }
-  }
-
   // categoria que mais subiu / caiu contra a média
   const deltas = byCat
     .filter((c) => c.category_id !== null && (avg.get(c.category_id) ?? 0) > 50)
@@ -53,16 +34,18 @@ export async function computeInsights(month: string = currentMonth(), db: Querya
   if (up && up.delta > 0 && up.delta / up.avg > 0.25) {
     out.push({
       tone: 'warning',
-      title: `${up.icon ?? ''} ${up.name} subiu ${Math.round((up.delta / up.avg) * 100)}%`,
-      detail: `${formatBRL(up.total)} este mês contra média de ${formatBRL(up.avg)}. São ${up.count} lançamentos.`,
+      icon: up.icon,
+      title: `${up.name} subiu ${Math.round((up.delta / up.avg) * 100)}%`,
+      detail: `${formatBRL(up.total)} contra média de ${formatBRL(up.avg)}, em ${up.count} lançamentos.`,
     });
   }
   const down = deltas[deltas.length - 1];
   if (down && down.delta < 0 && -down.delta / down.avg > 0.25 && down !== up) {
     out.push({
       tone: 'good',
-      title: `${down.icon ?? ''} ${down.name} caiu ${Math.round((-down.delta / down.avg) * 100)}%`,
-      detail: `${formatBRL(down.total)} este mês contra média de ${formatBRL(down.avg)}.`,
+      icon: down.icon,
+      title: `${down.name} caiu ${Math.round((-down.delta / down.avg) * 100)}%`,
+      detail: `${formatBRL(down.total)} contra média de ${formatBRL(down.avg)}.`,
     });
   }
 
@@ -71,17 +54,23 @@ export async function computeInsights(month: string = currentMonth(), db: Querya
     if (c.budget && c.total > c.budget) {
       out.push({
         tone: 'warning',
-        title: `${c.icon ?? ''} ${c.name} passou do orçamento`,
-        detail: `${formatBRL(c.total)} de ${formatBRL(c.budget)} previstos (${Math.round((c.total / c.budget) * 100)}%).`,
+        icon: c.icon,
+        title: `${c.name} passou do orçamento da categoria`,
+        detail: `${formatBRL(c.total)} de ${formatBRL(c.budget)} (${Math.round((c.total / c.budget) * 100)}%).`,
       });
     }
   }
 
-  // maior gasto único
+  // maior gasto único (fora os que se repetem todo mês, senão é sempre o aluguel)
   const { rows: biggest } = await db.query<{ description: string; amount: number; date: string; account_name: string }>(
     `SELECT t.description, t.amount, t.date, a.name AS account_name FROM transactions t JOIN accounts a ON a.id = t.account_id
-     WHERE t.kind = 'expense' AND t.date >= $1 AND t.date <= $2 AND t.installment_group IS NULL ORDER BY t.amount ASC LIMIT 1`,
-    [start, end],
+     WHERE t.kind = 'expense' AND t.date >= $1 AND t.date <= $2 AND t.installment_group IS NULL
+       AND lower(t.description) NOT IN (
+         SELECT lower(description) FROM transactions WHERE kind = 'expense' AND date >= $3
+         GROUP BY 1 HAVING COUNT(DISTINCT date_trunc('month', date)) >= 3
+       )
+     ORDER BY t.amount ASC LIMIT 1`,
+    [start, end, monthStart(addMonths(month, -3))],
   );
   if (biggest[0] && totals.expense > 0 && Math.abs(biggest[0].amount) / totals.expense > 0.15) {
     out.push({
@@ -139,17 +128,7 @@ export async function computeInsights(month: string = currentMonth(), db: Querya
     });
   }
 
-  // taxa de poupança
-  if (totals.income > 0) {
-    const rate = (totals.income - totals.expense) / totals.income;
-    out.push({
-      tone: rate >= 0.2 ? 'good' : rate < 0 ? 'warning' : 'neutral',
-      title: rate >= 0 ? `Sobrou ${Math.round(rate * 100)}% da receita` : `Gastou ${Math.round(-rate * 100)}% além da receita`,
-      detail: `Receita de ${formatBRL(totals.income)} e gasto de ${formatBRL(totals.expense)}.`,
-    });
-  }
-
-  return out.slice(0, 6);
+  return out.slice(0, 3);
 }
 
 function cap(s: string) {

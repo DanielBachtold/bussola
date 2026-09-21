@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { addMonths, currentMonth, formatMonth, invoiceDates, monthEnd, monthStart, formatDate, openInvoiceMonth } from '@/lib/dates';
+import { addMonths, currentMonth, formatMonth, invoiceDates, monthEnd, monthStart, formatDate, openInvoiceMonth, todayDay } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import {
   categoryAverages, dailyCumulative, expensesByCategory, futureCommitments, invoiceSummaries,
@@ -8,6 +8,7 @@ import {
 import { computeInsights } from '@/lib/insights';
 import { monthParam } from '@/lib/params';
 import { getBudgetStatus } from '@/lib/budget';
+import { pool } from '@/lib/db';
 import { BudgetBars } from '@/components/BudgetBars';
 import { tripsAround, tripStatus } from '@/lib/trips';
 import { TripCard } from '@/components/TripCard';
@@ -50,6 +51,31 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   const openTotal = openInvoices.reduce((a, i) => a + i.total, 0);
   const committed = commitments.reduce((a, c) => a + c.total, 0);
 
+  // livre pra gastar: limite dos grupos de gasto menos o que já foi (e o que está fora dos grupos)
+  const isCurrent = month === currentMonth();
+  const daysInMonth = Number(monthEnd(month).slice(8, 10));
+  const daysLeft = isCurrent ? daysInMonth - todayDay() + 1 : 0;
+  const spendGroups = budget.groups.filter((g) => g.group.basis !== 'investment' && g.limit > 0);
+  const limitSum = spendGroups.reduce((a, g) => a + g.limit, 0);
+  const spentInGroups = spendGroups.reduce((a, g) => a + g.spent, 0) + budget.unassigned.spent;
+  const hasBudget = limitSum > 0;
+  const free = hasBudget ? limitSum - spentInGroups : balance;
+  const freeHint = !hasBudget
+    ? 'sem orçamento configurado'
+    : free < 0
+      ? `passou ${formatBRL(-free, { cents: false })} do teto de ${formatBRL(limitSum, { cents: false })}`
+      : isCurrent && daysLeft > 0
+        ? `${formatBRL(free / daysLeft, { cents: false })}/dia por ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`
+        : `de um teto de ${formatBRL(limitSum, { cents: false })}`;
+  const projected = isCurrent && todayDay() > 0 ? (totals.expense / todayDay()) * daysInMonth : null;
+  const invoiceHint = openInvoices.length === 0
+    ? 'nenhum cartão'
+    : checking.length
+      ? (checkingTotal - openTotal >= 0 ? `saldo cobre, sobram ${formatBRL(checkingTotal - openTotal, { cents: false })}` : `faltam ${formatBRL(openTotal - checkingTotal, { cents: false })} na conta`)
+      : openInvoices.length === 1 ? `vence ${formatDate(openInvoices[0].due).slice(0, 5)}` : `${openInvoices.length} cartões`;
+  const { rows: pendingRows } = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM transactions WHERE reviewed = FALSE`);
+  const pendingCount = pendingRows[0]?.n ?? 0;
+
   const top = byCat.slice(0, 8);
   const rest = byCat.slice(8);
   const barItems = top.map((c) => ({
@@ -83,10 +109,10 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
       ) : null}
 
       <section className="order-1 lg:order-none grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Gasto no mês" value={totals.expense} delta={avgTotal ? { pct: (totals.expense - avgTotal) / avgTotal } : null} hint={avgTotal ? `média ${formatBRL(avgTotal, { cents: false })}` : `${totals.expenseCount} lançamentos`} />
-        <StatTile label="Receita" value={totals.income} delta={prevTotals.income ? { pct: (totals.income - prevTotals.income) / prevTotals.income, goodWhenDown: false } : null} hint={prevTotals.income ? `${formatMonth(prevMonth)}: ${formatBRL(prevTotals.income, { cents: false })}` : undefined} />
-        <StatTile label="Sobrou" value={balance} tone={balance < 0 ? 'bad' : 'good'} hint={totals.income ? `${Math.round((balance / totals.income) * 100)}% da receita` : 'sem receita registrada'} />
-        <StatTile label="Faturas abertas" value={openTotal} hint={openInvoices.length === 1 ? `vence ${formatDate(openInvoices[0].due).slice(0, 5)}` : openInvoices.length ? `${openInvoices.length} cartões · próx. ${formatDate([...openInvoices].sort((a, b) => a.due.localeCompare(b.due))[0].due).slice(0, 5)}` : 'nenhum cartão'} />
+        <StatTile label={isCurrent ? 'Livre pra gastar' : 'Sobrou do teto'} value={free} tone={free < 0 ? 'bad' : 'good'} hint={freeHint} />
+        <StatTile label="Gasto no mês" value={totals.expense} delta={avgTotal ? { pct: (totals.expense - avgTotal) / avgTotal } : null} hint={projected && avgTotal ? `projeção ${formatBRL(projected, { cents: false })} · média ${formatBRL(avgTotal, { cents: false })}` : projected ? `projeção ${formatBRL(projected, { cents: false })}` : avgTotal ? `média ${formatBRL(avgTotal, { cents: false })}` : `${totals.expenseCount} lançamentos`} />
+        <StatTile label="Sobrou" value={balance} tone={balance < 0 ? 'bad' : undefined} hint={totals.income ? `receita ${formatBRL(totals.income, { cents: false })} · ${Math.round((balance / totals.income) * 100)}%` : 'sem receita registrada'} />
+        <StatTile label="Faturas abertas" value={openTotal} tone={checking.length && checkingTotal - openTotal < 0 ? 'bad' : undefined} hint={invoiceHint} />
       </section>
 
       {tripStatuses.length ? (
@@ -116,14 +142,23 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         <div className="hidden lg:block"><BudgetBars status={budget} /></div>
       </section>
 
-      {insights.length ? (
-        <section className="order-5 lg:order-none grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {insights.map((i, idx) => (
-            <div key={idx} className={`card p-4 border-l-4 ${idx >= 3 ? 'hidden md:block' : ''} ${i.tone === 'good' ? 'border-l-good' : i.tone === 'warning' ? 'border-l-warn' : 'border-l-border-strong'}`}>
-              <p className="text-[14px] font-semibold leading-snug">{i.title}</p>
-              <p className="text-[13px] text-ink-2 mt-1">{i.detail}</p>
-            </div>
-          ))}
+      {insights.length || pendingCount ? (
+        <section className="order-5 lg:order-none card p-4 flex flex-col gap-2">
+          <h2 className="font-semibold">Destaques</h2>
+          <ul className="flex flex-col divide-y divide-border">
+            {pendingCount ? (
+              <li className="py-2 flex items-start gap-2.5 text-[13px]">
+                <span className="mt-1.5 w-2 h-2 rounded-full bg-warn shrink-0" aria-hidden />
+                <span><span className="font-medium">{pendingCount} lançamento{pendingCount > 1 ? 's' : ''} do extrato sem categoria.</span> <Link href="/revisar" className="text-accent">Revisar</Link></span>
+              </li>
+            ) : null}
+            {insights.map((i, idx) => (
+              <li key={idx} className="py-2 flex items-start gap-2.5 text-[13px]">
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${i.tone === 'good' ? 'bg-good' : i.tone === 'warning' ? 'bg-warn' : 'bg-ink-3'}`} aria-hidden />
+                <span><span className="font-medium">{i.icon ? `${i.icon} ` : ''}{i.title}.</span> <span className="text-ink-2">{i.detail}</span></span>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
@@ -154,12 +189,18 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
             {checking.map((c) => (
               <div key={c.id} className="flex justify-between py-2"><dt className="text-ink-2">{c.name} <span className="text-ink-3 text-[12px]">em {formatDate(c.balance_at!).slice(0, 5)}</span></dt><dd className="tabular font-medium">{formatBRL(c.balance)}</dd></div>
             ))}
-            {checking.length > 1 ? <div className="flex justify-between py-2"><dt className="text-ink-2">Em conta</dt><dd className="tabular font-semibold">{formatBRL(checkingTotal)}</dd></div> : null}
-            <div className="flex justify-between py-2"><dt className="text-ink-2">Investido</dt><dd className="tabular font-semibold">{invested ? formatBRL(invested) : <Link href="/investimentos" className="text-accent text-[13px]">registrar</Link>}</dd></div>
-            <div className="flex justify-between py-2"><dt className="text-ink-2">Parcelas a vencer</dt><dd className={`tabular font-semibold ${committed ? 'text-warn' : ''}`}>{formatBRL(committed)}</dd></div>
-            {commitments.slice(0, 4).map((c) => (
-              <div key={c.month} className="flex justify-between py-1.5 text-[13px]"><dt className="text-ink-3 pl-3">{formatMonth(c.month)} · {c.count} {c.count === 1 ? 'parcela' : 'parcelas'}</dt><dd className="tabular text-ink-2">{formatBRL(c.total)}</dd></div>
-            ))}
+            {checking.length > 1 ? <div className="flex justify-between py-2"><dt className="text-ink-2">Em conta</dt><dd className="font-semibold">{formatBRL(checkingTotal)}</dd></div> : null}
+            {checking.length && openInvoices.length ? (
+              <>
+                <div className="flex justify-between py-2"><dt className="text-ink-2">Fatura aberta <span className="text-ink-3 text-[12px]">vence {formatDate([...openInvoices].sort((a, b) => a.due.localeCompare(b.due))[0].due).slice(0, 5)}</span></dt><dd className="text-ink-2">−{formatBRL(openTotal)}</dd></div>
+                <div className="flex justify-between py-2"><dt className="text-ink-2">Livre após a fatura</dt><dd className={`font-semibold ${checkingTotal - openTotal < 0 ? 'text-bad' : ''}`}>{formatBRL(checkingTotal - openTotal)}</dd></div>
+              </>
+            ) : null}
+            <div className="flex justify-between py-2"><dt className="text-ink-2">Investido</dt><dd className="font-semibold">{invested ? formatBRL(invested) : <Link href="/investimentos" className="text-accent text-[13px]">registrar</Link>}</dd></div>
+            <div className="flex justify-between py-2">
+              <dt className="text-ink-2">Parcelas a vencer{commitments.length ? <span className="text-ink-3 text-[12px]"> {formatMonth(commitments[0].month)}{commitments.length > 1 ? ` a ${formatMonth(commitments[commitments.length - 1].month)}` : ''} · {commitments.reduce((a, c) => a + c.count, 0)} parcelas</span> : null}</dt>
+              <dd className={`font-semibold ${committed ? 'text-warn' : ''}`}><Link href="/faturas">{formatBRL(committed)}</Link></dd>
+            </div>
           </dl>
         </div>
       </section>
