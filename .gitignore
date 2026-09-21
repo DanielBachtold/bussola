@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dados pessoais: extratos, faturas e qualquer export de banco NUNCA entram no repo
+/dados/
+*.ofx
+*.OFX
+*.qfx
+*.csv
+*.xls
+*.xlsx
+*.pdf
