@@ -17,7 +17,7 @@ function revalidateAll() {
   for (const p of ['/', '/transacoes', '/faturas', '/revisar', '/lancar', '/investimentos']) revalidatePath(p);
 }
 
-export type ActionState = { ok?: boolean; error?: string; message?: string; ids?: number[]; removed?: TransactionRow[]; applied?: number };
+export type ActionState = { ok?: boolean; error?: string; message?: string; ids?: number[]; installments?: number; removed?: TransactionRow[]; applied?: number };
 
 /** Lançamento pela barra rápida: a frase já foi interpretada no cliente e confirmada. */
 export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null; tripId?: number | null; date?: string }): Promise<ActionState> {
@@ -48,8 +48,9 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
   // aporte/resgate em investimento: registra também o outro lado na conta corrente, se houver só uma
   const checking = accounts.filter((a) => a.kind === 'checking');
   let mirror = '';
+  const ids = [created[0].id];
   if (parsed.kind === 'transfer' && account.kind === 'investment' && checking.length === 1) {
-    await createTransaction({
+    const [side] = await createTransaction({
       accountId: checking[0].id,
       date,
       amount: -amount,
@@ -57,12 +58,13 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
       kind: 'transfer',
       source: 'manual',
     });
+    if (side) ids.push(side.id);
     mirror = ` e ${parsed.direction === 'out' ? 'a entrada em' : 'a saída de'} ${checking[0].name}`;
   }
   revalidateAll();
   const first = created[0];
   const trip = first.trip_name ? ` na viagem ${first.trip_name}` : '';
-  return { ok: true, ids: created.map((t) => t.id), message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${trip}${mirror}.` };
+  return { ok: true, ids, installments: created.length, message: `${first.description} registrado em ${first.account_name}${created.length > 1 ? ` (${created.length} parcelas)` : ''}${trip}${mirror}.` };
 }
 
 export async function addTransaction(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
@@ -103,7 +105,8 @@ export async function addTransaction(_prev: ActionState | undefined, formData: F
  */
 async function applyRuleToQueue(db: Queryable, pattern: string, exceptId: number, categoryId: number | null, kind: TxKind | null): Promise<number> {
   // mesma fronteira de palavra do applyRules, ignorando acentos dos dois lados
-  const re = `(^|[^[:alnum:]])${accentInsensitiveRegex(pattern)}([^[:alnum:]]|$)`;
+  // o padrão vem sem pontuação ("uber trip"); no extrato pode haver "UBER *TRIP", "UBER-TRIP"
+  const re = `(^|[^[:alnum:]])${accentInsensitiveRegex(pattern).replace(/ /g, '[^[:alnum:]]+')}([^[:alnum:]]|$)`;
   const { rowCount } = await db.query(
     `UPDATE transactions SET category_id = COALESCE($3, category_id), kind = COALESCE($4, kind), reviewed = TRUE, updated_at = NOW()
      WHERE reviewed = FALSE AND id <> $1 AND category_id IS NULL

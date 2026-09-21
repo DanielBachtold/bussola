@@ -7,12 +7,14 @@ import { TxList } from '@/components/TxList';
 import { FullForm } from './FullForm';
 import { listTrips } from '@/lib/trips';
 import { requireSession } from '@/lib/session';
+import { postRecurring } from '@/lib/recurring';
 import { Help } from './Help';
 
 export const metadata = { title: 'Lançar' };
 
 export default async function LancarPage({ searchParams }: PageProps<'/lancar'>) {
   await requireSession();
+  await postRecurring().catch(() => 0);
   const sp = await searchParams;
   // ?q= vem do atalho da Siri ou do "compartilhar" da notificação do banco; ok=1 lança sem confirmar
   const initialText = typeof sp.q === 'string' ? sp.q.slice(0, 200) : '';

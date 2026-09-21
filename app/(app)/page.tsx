@@ -11,7 +11,7 @@ import { getBudgetStatus } from '@/lib/budget';
 import { pool } from '@/lib/db';
 import { BudgetBars } from '@/components/BudgetBars';
 import { tripsAround, tripStatus } from '@/lib/trips';
-import { daysUntil, pendingFixedThisMonth, upcoming } from '@/lib/recurring';
+import { daysUntil, pendingFixedThisMonth, postRecurring, upcoming } from '@/lib/recurring';
 import { TripCard } from '@/components/TripCard';
 import { StatTile } from '@/components/StatTile';
 import { MonthNav } from '@/components/MonthNav';
@@ -26,6 +26,7 @@ const isCurrentMonth = (m: string) => m === currentMonth();
 
 export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   await requireSession();
+  await postRecurring().catch(() => 0);
   const sp = await searchParams;
   const month = monthParam(sp.m) ?? currentMonth();
   const prevMonth = addMonths(month, -1);

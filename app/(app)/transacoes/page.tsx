@@ -9,6 +9,7 @@ import { Filters } from './Filters';
 import { listTrips } from '@/lib/trips';
 import { intParam, monthParam } from '@/lib/params';
 import { requireSession } from '@/lib/session';
+import { postRecurring } from '@/lib/recurring';
 
 export const metadata = { title: 'Lançamentos' };
 
@@ -16,6 +17,7 @@ const PAGE = 200;
 
 export default async function TransacoesPage({ searchParams }: PageProps<'/transacoes'>) {
   await requireSession();
+  await postRecurring().catch(() => 0);
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '');
   const search = str('q').trim() || undefined;
@@ -60,7 +62,7 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
         {allTime ? <Link href={`/transacoes?m=${currentMonth()}`} className="btn btn-ghost btn-sm">Voltar ao mês</Link> : <MonthNav month={month} basePath="/transacoes" extra={extra} />}
       </header>
       <Filters
-        key={qs.toString()}
+        key={[accountId, categoryId, kind, situation, tripId].join('|')}
         accounts={accounts} categories={categories} trips={trips} month={allTime ? 'all' : month}
         values={{ a: accountId, c: categoryId, k: kind, s: situation, v: tripId, q: search }}
       />

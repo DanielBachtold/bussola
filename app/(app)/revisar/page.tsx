@@ -10,9 +10,11 @@ import { MarkAllButton } from './MarkAll';
 export const metadata = { title: 'Revisar' };
 
 import { requireSession } from '@/lib/session';
+import { postRecurring } from '@/lib/recurring';
 
 export default async function RevisarPage() {
   await requireSession();
+  await postRecurring().catch(() => 0);
   const [{ unreviewed, unmatched, total }, categories, trips, rules, topByAccount] = await Promise.all([pendingReview(), listCategories(), listTrips(), listRules(pool), topCategoriesByAccount(3)]);
   const sum = unreviewed.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
 

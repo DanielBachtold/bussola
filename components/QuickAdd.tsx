@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowUp } from 'lucide-react';
 import { quickParse, type QuickHistory } from '@/lib/quickparse';
 import { formatBRL } from '@/lib/money';
@@ -21,6 +22,7 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
   accounts: Account[]; categories: Category[]; rules: Rule[]; trips?: Trip[]; frequent?: FrequentDescription[]; initialText?: string; autoSubmit?: boolean;
 }) {
   const toast = useToast();
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(initialText);
   const [accountId, setAccountId] = useState<number | ''>('');
@@ -36,7 +38,8 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
     return () => clearInterval(t);
   }, [text]);
 
-  const history = useMemo<QuickHistory>(() => new Map(frequent.map((f) => [f.key, { categoryId: f.category_id, accountId: f.account_id }])), [frequent]);
+  // chaves sem acento dos dois lados: "café" digitado como "cafe" ainda acha o histórico
+  const history = useMemo<QuickHistory>(() => new Map(frequent.map((f) => [normalizeText(f.key), { categoryId: f.category_id, accountId: f.account_id }])), [frequent]);
   const parsed = useMemo(() => (text.trim() ? quickParse(text, accounts, categories, rules, history) : null), [text, accounts, categories, rules, history]);
   const effectiveAccount = accountId !== '' ? accounts.find((a) => a.id === accountId) ?? null : parsed?.account ?? null;
   const effectiveCategory = categoryId === null ? parsed?.category ?? null : categoryId === '' ? null : categories.find((c) => c.id === categoryId) ?? null;
@@ -48,7 +51,7 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
 
   // chips: os gastos que você mais repete; com 2+ letras, filtra pelo começo
   const typed = normalizeText(text);
-  const chips = (typed.length >= 2 && !/\d/.test(typed) ? frequent.filter((f) => f.key.startsWith(typed)) : text ? [] : frequent).slice(0, 5);
+  const chips = (typed.length >= 2 && !/\d/.test(typed) ? frequent.filter((f) => normalizeText(f.key).startsWith(typed)) : text ? [] : frequent).slice(0, 5);
 
   function reset() {
     setText(''); setAccountId(''); setCategoryId(null); setTripChoice(null);
@@ -57,7 +60,8 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
 
   function submit() {
     if (!parsed || !effectiveAccount || pending) return;
-    const snapshot = { text, accountId: effectiveAccount.id, categoryId: categoryId === null ? undefined : categoryId === '' ? null : categoryId, tripId: trip ? (tripOn ? trip.id : null) : undefined, date: parsed.date };
+    // manda a categoria que a prévia mostrou (o servidor não tem o histórico dos chips)
+    const snapshot = { text, accountId: effectiveAccount.id, categoryId: effectiveCategory?.id ?? null, tripId: trip ? (tripOn ? trip.id : null) : undefined, date: parsed.date };
     start(async () => {
       const res = await quickAdd(snapshot.text, { accountId: snapshot.accountId, categoryId: snapshot.categoryId, tripId: snapshot.tripId, date: snapshot.date });
       if (res.ok) {
@@ -65,7 +69,11 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
         toast({
           tone: 'good',
           text: res.message ?? 'Registrado.',
-          action: ids.length ? { label: 'Desfazer', onClick: async () => { const r = await removeTransaction(ids[0], ids.length > 1); if (r.removed) { const rows = r.removed; toast({ text: 'Desfeito.', action: { label: 'Refazer', onClick: async () => { await undoRemove(rows); } } }); } } } : undefined,
+          action: ids.length ? { label: 'Desfazer', onClick: async () => {
+            // parcelas saem pelo grupo (a partir da 1ª); o espelho do aporte sai pelo próprio id
+            const rows = (await Promise.all(ids.map((id, i) => removeTransaction(id, i === 0 && (res.installments ?? 1) > 1)))).flatMap((r) => r.removed ?? []);
+            if (rows.length) toast({ text: 'Desfeito.', action: { label: 'Refazer', onClick: async () => { await undoRemove(rows); } } });
+          } } : undefined,
         });
         reset();
       } else {
@@ -74,11 +82,15 @@ export function QuickAdd({ accounts, categories, rules, trips = [], frequent = [
     });
   }
 
-  // veio de um atalho ou do compartilhar: lança sozinho se a frase estiver completa
+  // veio de um atalho ou do compartilhar: decide UMA vez, no mount, com a frase inicial
+  // (nunca ao usuário completar a frase depois) e tira q/ok da URL pra não relançar ao recarregar
   useEffect(() => {
-    if (autoSubmit && !autoDone.current && ready) { autoDone.current = true; submit(); }
+    if (!autoSubmit || autoDone.current) return;
+    autoDone.current = true;
+    if (ready) submit();
+    router.replace('/lancar');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSubmit, ready]);
+  }, []);
 
   const status = !text.trim() ? null
     : !parsed ? 'Falta o valor. Ex.: "uber 23,50".'

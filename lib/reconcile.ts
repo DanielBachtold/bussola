@@ -175,14 +175,20 @@ export async function commitImport(accountId: number, filename: string, statemen
     }
 
     const skipped = preview.counts.duplicate;
+    // o que mudou na conta fica anotado no import, pra desfazer reverter também
+    let changedBalance = false, learnedAcct = false;
     if (statement.balance !== null && account.kind !== 'credit_card') {
       await db.query(`UPDATE accounts SET balance = $2, balance_at = $3 WHERE id = $1`, [accountId, statement.balance, statement.balanceDate ?? periodEnd]);
+      changedBalance = true;
     }
-    // guarda o número da conta do arquivo pra reconhecer o próximo
     if (statement.acctId && !account.ofx_acctid) {
-      await db.query(`UPDATE accounts SET ofx_acctid = $2 WHERE id = $1 AND ofx_acctid IS NULL`, [accountId, statement.acctId]);
+      const { rowCount } = await db.query(`UPDATE accounts SET ofx_acctid = $2 WHERE id = $1 AND ofx_acctid IS NULL`, [accountId, statement.acctId]);
+      learnedAcct = (rowCount ?? 0) > 0;
     }
-    await db.query(`UPDATE imports SET matched = $2, inserted = $3, skipped = $4 WHERE id = $1`, [importId, matches.length, inserted, skipped]);
+    await db.query(
+      `UPDATE imports SET matched = $2, inserted = $3, skipped = $4, learned_acctid = $5, changed_balance = $6, prev_balance = $7, prev_balance_at = $8 WHERE id = $1`,
+      [importId, matches.length, inserted, skipped, learnedAcct, changedBalance, account.balance, account.balance_at],
+    );
     return { importId, matched: matches.length, inserted, skipped };
   });
 }
@@ -190,11 +196,20 @@ export async function commitImport(accountId: number, filename: string, statemen
 /** Desfaz uma importação: apaga o que ela inseriu e devolve os conciliados ao estado de pendente. */
 export async function undoImport(importId: number): Promise<{ deleted: number; unmatched: number }> {
   return withTransaction(async (db) => {
+    const { rows } = await db.query<{ account_id: number; learned_acctid: boolean; changed_balance: boolean; prev_balance: number | null; prev_balance_at: string | null }>(
+      `SELECT account_id, learned_acctid, changed_balance, prev_balance, prev_balance_at FROM imports WHERE id = $1`, [importId],
+    );
+    const imp = rows[0];
+    if (!imp) throw new Error('Importação não encontrada.');
     const { rowCount: deleted } = await db.query(`DELETE FROM transactions WHERE import_id = $1`, [importId]);
     const { rowCount: unmatched } = await db.query(
       `UPDATE transactions SET status = 'pending', fitid = NULL, statement_description = NULL, reconciled_import_id = NULL, updated_at = NOW() WHERE reconciled_import_id = $1`,
       [importId],
     );
+    // importação antiga (antes de guardar o vínculo): não há o que desfazer, e apagar o histórico esconderia isso
+    if (!deleted && !unmatched) throw new Error('Essa importação é antiga e não tem vínculo com os lançamentos; não dá pra desfazer automaticamente.');
+    if (imp.learned_acctid) await db.query(`UPDATE accounts SET ofx_acctid = NULL WHERE id = $1`, [imp.account_id]);
+    if (imp.changed_balance) await db.query(`UPDATE accounts SET balance = $2, balance_at = $3 WHERE id = $1`, [imp.account_id, imp.prev_balance, imp.prev_balance_at]);
     await db.query(`DELETE FROM imports WHERE id = $1`, [importId]);
     return { deleted: deleted ?? 0, unmatched: unmatched ?? 0 };
   });

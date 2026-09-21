@@ -101,6 +101,10 @@ const statements = [
   `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
   `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reconciled_import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS ofx_acctid TEXT`,
+  `ALTER TABLE imports ADD COLUMN IF NOT EXISTS learned_acctid BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE imports ADD COLUMN IF NOT EXISTS prev_balance NUMERIC(14,2)`,
+  `ALTER TABLE imports ADD COLUMN IF NOT EXISTS prev_balance_at DATE`,
+  `ALTER TABLE imports ADD COLUMN IF NOT EXISTS changed_balance BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE TABLE IF NOT EXISTS recurring_rules (
     id SERIAL PRIMARY KEY,
     description TEXT NOT NULL,

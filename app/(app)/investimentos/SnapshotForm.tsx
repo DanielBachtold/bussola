@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import { Plus } from 'lucide-react';
 import { removeSnapshot, restoreSnapshot, saveSnapshots } from '@/app/actions/investments';
-import { formatBRL } from '@/lib/money';
+import { formatBRL, parseAmount } from '@/lib/money';
 import { addMonths, currentMonth, formatMonth } from '@/lib/dates';
 import type { Account, Snapshot } from '@/lib/types';
 import { useToast } from '@/components/Toast';
@@ -46,7 +46,8 @@ export function SnapshotForm({ accounts, snapshots, contributions }: { accounts:
   const [seenMonth, setSeenMonth] = useState(month);
   if (seenMonth !== month) { setSeenMonth(month); setRows(initialRows); }
 
-  const [saved, setSaved] = useState<Record<string, number>>({});
+  // saldos salvos nesta sessão, por mês: o rendimento só vale pro mês que foi salvo
+  const [saved, setSaved] = useState<Record<string, Record<string, number>>>({});
   const update = (key: string, patch: Partial<Row>) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () => setRows((list) => [...list, { key: `new-${Date.now()}`, accountId: accounts[0]?.id ?? 0, asset: '', assetClass: '', previous: null, balance: '', locked: false }]);
 
@@ -56,12 +57,20 @@ export function SnapshotForm({ accounts, snapshots, contributions }: { accounts:
       if (r.error) { toast({ tone: 'bad', text: r.error }); return; }
       toast({ tone: 'good', text: r.message ?? 'Salvo.' });
       const out: Record<string, number> = {};
-      for (const x of rows) if (x.balance.trim()) out[x.key] = Number(x.balance.replace(/\./g, '').replace(',', '.'));
-      setSaved(out);
+      for (const x of rows) if (x.balance.trim()) { try { out[x.key] = parseAmount(x.balance); } catch { /* valor inválido já foi recusado no servidor */ } }
+      setSaved((all) => ({ ...all, [month]: out }));
     });
   }
 
   const contribMonth = contributions[month] ?? {};
+  const savedMonth = saved[month] ?? {};
+  // rendimento por conta: soma dos saldos novos menos soma dos anteriores menos o aporte da conta
+  const accountReturns = accounts.map((a) => {
+    const mine = rows.filter((r) => r.accountId === a.id && savedMonth[r.key] !== undefined && r.previous !== null);
+    if (!mine.length) return null;
+    const value = mine.reduce((acc, r) => acc + savedMonth[r.key], 0) - mine.reduce((acc, r) => acc + (r.previous ?? 0), 0) - (contribMonth[a.id] ?? 0);
+    return { account: a, value, partial: mine.length < rows.filter((r) => r.accountId === a.id).length };
+  }).filter((x): x is NonNullable<typeof x> => Boolean(x));
 
   return (
     <div className="flex flex-col gap-3 text-[13px]">
@@ -75,8 +84,9 @@ export function SnapshotForm({ accounts, snapshots, contributions }: { accounts:
       <ul className="flex flex-col divide-y divide-border">
         {rows.map((r) => {
           const account = accounts.find((a) => a.id === r.accountId);
-          const savedValue = saved[r.key];
-          const delta = savedValue !== undefined && r.previous !== null ? savedValue - r.previous - (contribMonth[r.accountId] ?? 0) : null;
+          const savedValue = savedMonth[r.key];
+          // por linha, só a variação bruta; o aporte é descontado no total da conta (abaixo)
+          const delta = savedValue !== undefined && r.previous !== null ? savedValue - r.previous : null;
           return (
             <li key={r.key} className="py-2 grid grid-cols-[1fr_auto] sm:grid-cols-[1.4fr_1fr_1fr] gap-x-3 gap-y-1 items-center">
               {r.locked ? (
@@ -93,12 +103,21 @@ export function SnapshotForm({ accounts, snapshots, contributions }: { accounts:
               <span className="text-ink-3 text-right hidden sm:block">{r.previous !== null ? `antes ${formatBRL(r.previous)}` : ''}</span>
               <span className="flex flex-col items-end gap-0.5">
                 <input className="input !py-1.5 text-right max-w-[150px]" inputMode="decimal" placeholder={r.previous !== null ? String(r.previous).replace('.', ',') : '0,00'} value={r.balance} onChange={(e) => update(r.key, { balance: e.target.value })} />
-                {delta !== null ? <span className={`text-[12px] ${delta >= 0 ? 'text-good' : 'text-bad'}`}>{delta >= 0 ? '+' : ''}{formatBRL(delta)} no mês</span> : r.previous !== null ? <span className="text-[11px] text-ink-3 sm:hidden">antes {formatBRL(r.previous)}</span> : null}
+                {delta !== null ? <span className={`text-[12px] ${delta >= 0 ? 'text-good' : 'text-bad'}`}>{delta >= 0 ? '+' : ''}{formatBRL(delta)} de variação</span> : r.previous !== null ? <span className="text-[11px] text-ink-3 sm:hidden">antes {formatBRL(r.previous)}</span> : null}
               </span>
             </li>
           );
         })}
       </ul>
+      {accountReturns.length ? (
+        <ul className="text-[13px] flex flex-col gap-0.5">
+          {accountReturns.map((x) => (
+            <li key={x.account.id} className={x.value >= 0 ? 'text-good' : 'text-bad'}>
+              {x.account.name}: {x.value >= 0 ? '+' : ''}{formatBRL(x.value)} de rendimento no mês{contribMonth[x.account.id] ? ` (já descontando ${formatBRL(contribMonth[x.account.id])} de aporte)` : ''}{x.partial ? ', com parte dos ativos' : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <datalist id="classes">{['Renda fixa', 'Ações', 'FII', 'Exterior', 'Cripto', 'Previdência', 'Caixa'].map((c) => <option key={c} value={c} />)}</datalist>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="btn btn-ghost btn-sm" onClick={addRow}><Plus size={14} className="mr-1" />Adicionar ativo</button>

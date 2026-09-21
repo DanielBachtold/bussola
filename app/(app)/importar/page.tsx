@@ -12,7 +12,9 @@ export default async function ImportarPage() {
   await requireSession();
   const accounts = (await listAccounts()).filter((a) => a.kind !== 'investment');
   const { rows: history } = await pool.query<{ id: number; account_id: number; filename: string; account_name: string; period_start: string | null; period_end: string | null; matched: number; inserted: number; skipped: number; created_at: string; latest: boolean }>(
-    `SELECT i.*, a.name AS account_name, i.id = MAX(i.id) OVER (PARTITION BY i.account_id) AS latest
+    `SELECT i.*, a.name AS account_name,
+            i.id = MAX(i.id) OVER (PARTITION BY i.account_id)
+              AND EXISTS (SELECT 1 FROM transactions t WHERE t.import_id = i.id OR t.reconciled_import_id = i.id) AS latest
      FROM imports i JOIN accounts a ON a.id = i.account_id ORDER BY i.id DESC LIMIT 12`,
   );
   return (

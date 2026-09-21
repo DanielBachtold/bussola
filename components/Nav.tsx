@@ -84,14 +84,14 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
       ) : null}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/90 backdrop-blur-md border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="grid grid-cols-5 items-end">
-          {primary.slice(0, 2).map((it) => <Tab key={it.href} item={it} active={isActive(it.href) && !more} />)}
-          <Link href="/lancar" className="flex flex-col items-center gap-1 pb-1.5 -mt-4" aria-label="Lançar">
+          {primary.slice(0, 2).map((it) => <Tab key={it.href} item={it} active={isActive(it.href) && !more} onClick={() => setMore(false)} />)}
+          <Link href="/lancar" onClick={() => setMore(false)} className="flex flex-col items-center gap-1 pb-1.5 -mt-4" aria-label="Lançar">
             <span className={`w-13 h-13 rounded-full flex items-center justify-center text-accent-ink shadow-md transition-transform active:scale-95 ${isActive('/lancar') ? 'bg-accent ring-4 ring-accent/20' : 'bg-accent'}`}>
               <Plus size={26} strokeWidth={2.25} />
             </span>
             <span className={`text-[11px] ${isActive('/lancar') ? 'text-ink font-semibold' : 'text-ink-3'}`}>Lançar</span>
           </Link>
-          {primary.slice(2, 3).map((it) => <Tab key={it.href} item={it} active={isActive(it.href) && !more} />)}
+          {primary.slice(2, 3).map((it) => <Tab key={it.href} item={it} active={isActive(it.href) && !more} onClick={() => setMore(false)} />)}
           <button type="button" onClick={() => setMore((m) => !m)} className={`relative flex flex-col items-center gap-1 pt-2 pb-1.5 text-[11px] ${more || moreActive ? 'text-ink font-semibold' : 'text-ink-3'}`} aria-expanded={more}>
             <Ellipsis size={22} strokeWidth={1.75} aria-hidden />
             Mais
@@ -103,10 +103,10 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
   );
 }
 
-function Tab({ item, active }: { item: NavItem; active: boolean }) {
+function Tab({ item, active, onClick }: { item: NavItem; active: boolean; onClick?: () => void }) {
   const Icon = ICONS[item.icon];
   return (
-    <Link href={item.href} className={`relative flex flex-col items-center gap-1 pt-2 pb-1.5 text-[11px] ${active ? 'text-ink font-semibold' : 'text-ink-3'}`}>
+    <Link href={item.href} onClick={onClick} className={`relative flex flex-col items-center gap-1 pt-2 pb-1.5 text-[11px] ${active ? 'text-ink font-semibold' : 'text-ink-3'}`}>
       <span className="relative">
         <Icon size={22} strokeWidth={active ? 2 : 1.75} aria-hidden />
         {item.badge ? <span className="absolute -top-1.5 left-full -ml-1 pill pill-warn !px-1.5 !py-0 !text-[10px] leading-4">{item.badge}</span> : null}

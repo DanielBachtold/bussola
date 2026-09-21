@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { pool } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { parseAmount } from '@/lib/money';
-import { postRecurring } from '@/lib/recurring';
+import { dueDate, postRecurring } from '@/lib/recurring';
+import { currentMonth, monthStart, todayISO } from '@/lib/dates';
 import type { ActionState } from './transactions';
 
 function revalidate() {
@@ -31,15 +32,16 @@ export async function saveRecurring(_prev: ActionState | undefined, formData: Fo
         [id, description, amount, accountId, categoryRaw ? Number(categoryRaw) : null, kind, day],
       );
     } else {
+      // criado depois do dia: não lança retroativo (o gasto deste mês provavelmente já está no extrato)
+      const alreadyDue = dueDate(currentMonth(), day) <= todayISO();
       await pool.query(
-        `INSERT INTO recurring_rules (description, amount, account_id, category_id, kind, day_of_month) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [description, amount, accountId, categoryRaw ? Number(categoryRaw) : null, kind, day],
+        `INSERT INTO recurring_rules (description, amount, account_id, category_id, kind, day_of_month, last_posted_month) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [description, amount, accountId, categoryRaw ? Number(categoryRaw) : null, kind, day, alreadyDue ? monthStart(currentMonth()) : null],
       );
     }
-    // se o dia já passou neste mês, lança agora
     await postRecurring();
     revalidate();
-    return { ok: true, message: 'Fixo salvo.' };
+    return { ok: true, message: 'Fixo salvo. Começa a ser lançado no próximo vencimento.' };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao salvar.' };
   }

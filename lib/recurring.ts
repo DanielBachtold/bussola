@@ -1,5 +1,5 @@
 import { pool, type Queryable } from './db';
-import { addMonths, currentMonth, daysBetween, formatMonth, invoiceDates, monthStart, todayDay, todayISO, toISO, fromISO } from './dates';
+import { addMonths, currentMonth, daysBetween, formatMonth, invoiceDates, monthStart, todayISO, toISO, fromISO } from './dates';
 import { createTransaction, invoiceSummaries, listAccounts } from './queries';
 import { getBudgetStatus } from './budget';
 import { tripsAround } from './trips';
@@ -20,7 +20,7 @@ export async function listRecurring(db: Queryable = pool): Promise<RecurringRule
   return rows;
 }
 
-function dueDate(month: string, day: number): string {
+export function dueDate(month: string, day: number): string {
   const [y, m] = month.slice(0, 7).split('-').map(Number);
   const last = new Date(y, m, 0).getDate();
   return toISO(new Date(y, m - 1, Math.min(day, last)));
@@ -32,19 +32,24 @@ function dueDate(month: string, day: number): string {
  */
 export async function postRecurring(db: Queryable = pool): Promise<number> {
   const month = currentMonth();
-  const { rows } = await db.query<RecurringRule>(
-    `SELECT * FROM recurring_rules WHERE active = TRUE AND (last_posted_month IS NULL OR last_posted_month < $1) AND day_of_month <= $2`,
-    [monthStart(month), todayDay()],
+  const today = todayISO();
+  const { rows } = await db.query<RecurringRule & { account_kind: string }>(
+    `SELECT r.*, a.kind AS account_kind FROM recurring_rules r JOIN accounts a ON a.id = r.account_id
+     WHERE r.active = TRUE AND (r.last_posted_month IS NULL OR r.last_posted_month < $1)`,
+    [monthStart(month)],
   );
   let n = 0;
   for (const r of rows) {
+    // dia 31 em setembro cai no dia 30: compara a data real, não o número do dia
+    if (dueDate(month, r.day_of_month) > today) continue;
     // trava a regra primeiro: duas abas abertas ao mesmo tempo não lançam duas vezes
     const { rowCount } = await db.query(
       `UPDATE recurring_rules SET last_posted_month = $2 WHERE id = $1 AND (last_posted_month IS NULL OR last_posted_month < $2)`,
       [r.id, monthStart(month)],
     );
     if (!rowCount) continue;
-    const amount = r.kind === 'expense' ? -Math.abs(r.amount) : r.kind === 'income' ? Math.abs(r.amount) : r.amount;
+    // transferência: entra na conta de investimento, sai das demais (mesma regra do resto do app)
+    const amount = r.kind === 'expense' ? -Math.abs(r.amount) : r.kind === 'income' ? Math.abs(r.amount) : r.account_kind === 'investment' ? Math.abs(r.amount) : -Math.abs(r.amount);
     await createTransaction({
       accountId: r.account_id, date: dueDate(month, r.day_of_month), amount, description: r.description,
       categoryId: r.category_id, kind: r.kind, source: 'manual', status: 'pending', notes: 'fixo', recurringId: r.id,
@@ -58,12 +63,15 @@ export async function postRecurring(db: Queryable = pool): Promise<number> {
 
 /** Fixos de gasto deste mês que ainda não caíram (dia > hoje): abatem do "livre pra gastar". */
 export async function pendingFixedThisMonth(db: Queryable = pool): Promise<{ total: number; items: RecurringRule[] }> {
+  const month = currentMonth();
+  const today = todayISO();
   const { rows } = await db.query<RecurringRule>(
     `SELECT r.*, a.name AS account_name FROM recurring_rules r JOIN accounts a ON a.id = r.account_id
-     WHERE r.active = TRUE AND r.kind = 'expense' AND r.day_of_month > $1 AND (r.last_posted_month IS NULL OR r.last_posted_month < $2)`,
-    [todayDay(), monthStart(currentMonth())],
+     WHERE r.active = TRUE AND r.kind = 'expense' AND (r.last_posted_month IS NULL OR r.last_posted_month < $1)`,
+    [monthStart(month)],
   );
-  return { total: rows.reduce((a, r) => a + Math.abs(r.amount), 0), items: rows };
+  const items = rows.filter((r) => dueDate(month, r.day_of_month) > today);
+  return { total: items.reduce((a, r) => a + Math.abs(r.amount), 0), items };
 }
 
 export type Upcoming = { date: string; label: string; amount: number; kind: 'invoice' | 'fixed' | 'trip' | 'goal'; href: string };
