@@ -1,0 +1,79 @@
+export type AccountKind = 'checking' | 'credit_card' | 'investment';
+export type TxKind = 'expense' | 'income' | 'transfer';
+export type TxSource = 'manual' | 'import' | 'chat';
+export type TxStatus = 'pending' | 'reconciled' | 'imported';
+
+export type Account = {
+  id: number;
+  name: string;
+  kind: AccountKind;
+  institution: string | null;
+  closing_day: number | null;
+  due_day: number | null;
+  credit_limit: number | null;
+  balance: number | null;
+  balance_at: string | null;
+  archived: boolean;
+};
+
+export type Category = {
+  id: number;
+  name: string;
+  kind: 'expense' | 'income';
+  icon: string | null;
+  budget: number | null;
+};
+
+export type Rule = {
+  id: number;
+  pattern: string;
+  category_id: number | null;
+  kind: TxKind | null;
+  category_name?: string | null;
+};
+
+export type Transaction = {
+  id: number;
+  account_id: number;
+  date: string;
+  amount: number;
+  description: string;
+  category_id: number | null;
+  kind: TxKind;
+  source: TxSource;
+  status: TxStatus;
+  reviewed: boolean;
+  fitid: string | null;
+  statement_description: string | null;
+  invoice_month: string | null;
+  installment_group: string | null;
+  installment_n: number | null;
+  installment_total: number | null;
+  notes: string | null;
+  account_name: string;
+  account_kind: AccountKind;
+  category_name: string | null;
+  category_icon: string | null;
+};
+
+export type Snapshot = {
+  id: number;
+  account_id: number;
+  account_name: string;
+  asset: string;
+  asset_class: string | null;
+  month: string;
+  balance: number;
+};
+
+export const KIND_LABEL: Record<AccountKind, string> = {
+  checking: 'Conta corrente',
+  credit_card: 'Cartão de crédito',
+  investment: 'Investimentos',
+};
+
+export const TX_KIND_LABEL: Record<TxKind, string> = {
+  expense: 'Gasto',
+  income: 'Receita',
+  transfer: 'Transferência',
+};

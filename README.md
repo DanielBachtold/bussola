@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bússola
 
-## Getting Started
+Sistema de finanças pessoais para quem quer saber onde o dinheiro está indo sem depender de app de banco nem de planilha. Feito para uso próprio, publicado para servir de base para quem quiser montar o seu.
 
-First, run the development server:
+**O que ele faz**
+
+- **Lançamento rápido, sem IA**: você escreve "almoço 42 crédito rico" ou "mercado 350 em 3x" e o sistema entende valor, conta, parcelas, data e categoria. Funciona no celular como app (PWA).
+- **Importação de extrato (OFX ou CSV)** com conciliação: o que você lançou durante o mês é casado com o extrato; o que veio no extrato e você esqueceu entra numa fila de revisão; o que você lançou e não apareceu no extrato também.
+- **Cartão de crédito de verdade**: dia de fechamento e vencimento por cartão, compra cai na fatura certa, parcelas viram uma linha por fatura, pagamento de fatura é transferência (não gasto), e o painel mostra quanto já está comprometido nos meses seguintes.
+- **Categorização que aprende**: ao categorizar uma linha do extrato, o sistema salva o padrão e categoriza sozinho da próxima vez.
+- **Painel com gráficos e insights** calculados em código: projeção do mês, categoria que mais subiu, gastos recorrentes, orçamento estourado, fatura vencendo, taxa de poupança.
+- **Investimentos**: registro mensal de posição por ativo, evolução do patrimônio contra aportes acumulados, alocação por ativo e classe.
+- **Chat com IA (opcional)**: se você definir `ANTHROPIC_API_KEY`, aparece um chat que responde perguntas consultando o seu banco de dados via ferramentas (nunca inventa número) e registra lançamentos por conversa. Sem a chave, o sistema funciona 100% e o chat nem aparece. A API da Anthropic é paga por uso.
+
+## Stack
+
+Next.js 16 (App Router, Server Actions), TypeScript, Tailwind 4, Recharts, Postgres via `pg` (SQL direto, sem ORM), iron-session para login de usuário único, `@anthropic-ai/sdk` para o chat opcional.
+
+## Rodando localmente
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <este repositório> bussola && cd bussola
+npm install
+cp .env.example .env.local   # edite: APP_PASSWORD, SESSION_SECRET (32+ chars)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Sem instalar Postgres**: o projeto traz um Postgres em WASM (PGlite) que roda dentro do Node e grava em `./dados/pglite` (ignorado pelo git).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run db:local     # deixa rodando num terminal
+npm run migrate      # cria as tabelas e as categorias padrão
+npm run seed:demo    # opcional: dados fictícios para explorar as telas
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Abra http://localhost:3000 e entre com a senha de `APP_PASSWORD`.
 
-## Learn More
+**Com Postgres de verdade** (Neon, Supabase, local): aponte `DATABASE_URL` e rode `npm run migrate`.
 
-To learn more about Next.js, take a look at the following resources:
+## Colocando em produção (Vercel + Neon)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crie um banco no [Neon](https://neon.tech) (plano gratuito basta) e copie a connection string.
+2. Importe o repositório na Vercel e defina as variáveis: `DATABASE_URL`, `APP_PASSWORD`, `SESSION_SECRET` (e `ANTHROPIC_API_KEY` só se quiser o chat).
+3. Rode a migração uma vez, do seu computador, apontando para o banco de produção: `DATABASE_URL=... npm run migrate`.
+4. No celular, abra a URL e use "Adicionar à tela de início": vira um app.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Como usar no dia a dia
 
-## Deploy on Vercel
+1. **Configurações**: cadastre sua conta corrente, seus cartões (com dia de fechamento e vencimento) e suas corretoras.
+2. **Lançar**: durante o mês, registre o que gastou pela barra rápida. Leva 5 segundos.
+3. **Importar extrato**: na virada do mês, exporte o OFX de cada conta e cartão e suba aqui. Veja a prévia (o que concilia, o que é novo, o que já existia) e confirme.
+4. **Revisar**: categorize o que faltou. Marque "aprender esse padrão" para não precisar repetir.
+5. **Investimentos**: uma vez por mês, registre o saldo de cada ativo.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Sobre sinais e tipos
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Valor negativo é saída, positivo é entrada, em qualquer conta.
+- `expense` e `income` entram nos gráficos. `transfer` (pagamento de fatura, aporte, resgate, Pix para você mesmo) nunca conta como gasto nem receita.
+- No cartão, o gasto conta na **data da compra**. A fatura é só a visão de caixa: quando aquele dinheiro sai da conta.
+- CSV de cartão costuma trazer compra como valor positivo. Marque "inverter sinais" na importação.
+
+## Estrutura
+
+```
+app/(app)/        páginas autenticadas (painel, lançar, extrato, faturas, revisar, importar, investimentos, config, chat)
+app/actions/      server actions (auth, transações, config, importação, investimentos)
+app/api/chat/     rota de streaming do chat (só com ANTHROPIC_API_KEY)
+lib/ofx.ts        parser de OFX 1.x e 2.x tolerante a banco brasileiro
+lib/csv.ts        parser de CSV com detecção de colunas
+lib/reconcile.ts  prévia e gravação da importação, conciliação por valor + data
+lib/quickparse.ts interpretador da barra rápida (sem IA)
+lib/insights.ts   insights calculados
+lib/queries.ts    acesso a dados
+lib/chat/tools.ts ferramentas que o modelo usa no chat
+scripts/          migrate, seed:demo, db:local (PGlite), make-icons
+```
+
+## Privacidade
+
+Este repositório contém só código. Seus dados ficam no seu banco. O `.gitignore` bloqueia `.env*`, `dados/`, `*.ofx`, `*.csv`, `*.pdf` e afins para você não commitar um extrato sem querer. Os prints e o seed usam dados fictícios.
+
+## Licença
+
+MIT.
