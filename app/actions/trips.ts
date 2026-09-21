@@ -24,10 +24,22 @@ export async function saveTrip(_prev: ActionState | undefined, formData: FormDat
     if (!name) return { error: 'Dê um nome pra viagem.' };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return { error: 'Informe as datas.' };
     if (end < start) return { error: 'A volta não pode ser antes da ida.' };
-    if (id) await pool.query(`UPDATE trips SET name=$2, start_date=$3, end_date=$4, budget=$5, notes=$6 WHERE id=$1`, [id, name, start, end, budget, notes]);
-    else await pool.query(`INSERT INTO trips (name, start_date, end_date, budget, notes) VALUES ($1,$2,$3,$4,$5)`, [name, start, end, budget, notes]);
+    let linked = 0;
+    if (id) {
+      await pool.query(`UPDATE trips SET name=$2, start_date=$3, end_date=$4, budget=$5, notes=$6 WHERE id=$1`, [id, name, start, end, budget, notes]);
+    } else {
+      const { rows } = await pool.query<{ id: number }>(`INSERT INTO trips (name, start_date, end_date, budget, notes) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [name, start, end, budget, notes]);
+      // gastos já lançados nas datas da viagem (fora categoria fixa e fora de outra viagem) entram nela
+      const { rowCount } = await pool.query(
+        `UPDATE transactions t SET trip_id = $1
+         WHERE t.kind = 'expense' AND t.trip_id IS NULL AND t.date BETWEEN $2 AND $3
+           AND (t.category_id IS NULL OR t.category_id NOT IN (SELECT id FROM categories WHERE fixed = TRUE))`,
+        [rows[0].id, start, end],
+      ).then((r) => ({ rowCount: r.rowCount ?? 0 })).catch(() => ({ rowCount: 0 }));
+      linked = rowCount;
+    }
     revalidate();
-    return { ok: true, message: 'Viagem salva.' };
+    return { ok: true, message: linked ? `Viagem salva. ${linked} gasto${linked > 1 ? 's' : ''} já lançado${linked > 1 ? 's' : ''} nas datas ${linked > 1 ? 'entraram' : 'entrou'} no teto.` : 'Viagem salva.' };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao salvar.' };
   }

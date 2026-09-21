@@ -38,11 +38,20 @@ export function FullForm({ accounts, categories, trips = [] }: { accounts: Accou
         <input name="date" type="date" className="input" defaultValue={todayISO()} required />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-ink-3">Conta</span>
+        <span className="text-ink-3">{kind === 'transfer' ? 'Sai de' : 'Conta'}</span>
         <select name="account_id" className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </label>
+      {kind === 'transfer' ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-ink-3">Entra em</span>
+          <select name="to_account_id" className="input" defaultValue={accounts.find((a) => String(a.id) !== accountId)?.id ?? ''}>
+            <option value="">Só registrar a saída</option>
+            {accounts.filter((a) => String(a.id) !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </label>
+      ) : null}
       {kind !== 'transfer' ? (
         <label className="flex flex-col gap-1">
           <span className="text-ink-3">Categoria</span>

@@ -77,23 +77,30 @@ export async function addTransaction(_prev: ActionState | undefined, formData: F
     const accounts = await listAccounts();
     const account = accounts.find((a) => a.id === accountId);
     if (!account) return { error: 'Escolha a conta.' };
-    // sinal: gasto sai; receita entra; transferência entra em investimento e sai das demais
-    const amount = kind === 'expense' ? -raw : kind === 'income' ? raw : account.kind === 'investment' ? raw : -raw;
+    // sinal: gasto sai; receita entra; transferência sai da conta de origem (e entra na de destino, se houver)
+    const toAccountId = kind === 'transfer' ? Number(formData.get('to_account_id')) || null : null;
+    const amount = kind === 'expense' ? -raw : kind === 'income' ? raw : -raw;
     const categoryRaw = formData.get('category_id');
+    const date = String(formData.get('date'));
+    const description = String(formData.get('description') ?? '').trim() || 'Sem descrição';
+    const notes = String(formData.get('notes') ?? '').trim() || null;
     await createTransaction({
       accountId,
-      date: String(formData.get('date')),
+      date,
       amount,
-      description: String(formData.get('description') ?? '').trim() || 'Sem descrição',
+      description,
       categoryId: categoryRaw ? Number(categoryRaw) : null,
       kind,
       source: 'manual',
       installments: Number(formData.get('installments') ?? 1) || 1,
-      notes: String(formData.get('notes') ?? '').trim() || null,
+      notes,
       tripId: (() => { const v = formData.get('trip_id'); return v === null || v === 'auto' ? undefined : v === '' ? null : Number(v); })(),
     });
+    if (toAccountId && accounts.some((a) => a.id === toAccountId)) {
+      await createTransaction({ accountId: toAccountId, date, amount: raw, description, kind: 'transfer', source: 'manual', notes, tripId: null });
+    }
     revalidateAll();
-    return { ok: true, message: 'Lançamento registrado.' };
+    return { ok: true, message: toAccountId ? 'Transferência registrada nas duas contas.' : 'Lançamento registrado.' };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao registrar.' };
   }

@@ -415,6 +415,28 @@ export async function invoiceSummaries(accountId?: number, db: Queryable = pool)
   return rows;
 }
 
+/** Quanto já foi pago (transferências que entraram no cartão) entre o fechamento e 15 dias depois do vencimento. */
+export async function invoicePayments(accountId: number, closes: string, due: string, db: Queryable = pool): Promise<{ paid: number; paidAt: string | null }> {
+  const { rows } = await db.query<{ paid: number; paid_at: string | null }>(
+    `SELECT COALESCE(SUM(amount),0)::numeric AS paid, MAX(date) AS paid_at FROM transactions
+     WHERE account_id = $1 AND kind = 'transfer' AND amount > 0 AND date >= $2::date - INTERVAL '3 days' AND date <= $3::date + INTERVAL '15 days'`,
+    [accountId, closes, due],
+  );
+  return { paid: rows[0]?.paid ?? 0, paidAt: rows[0]?.paid_at ?? null };
+}
+
+/** Gasto por categoria dentro de uma fatura. */
+export async function invoiceByCategory(accountId: number, invoiceMonth: string, db: Queryable = pool): Promise<CategoryTotal[]> {
+  const { rows } = await db.query<CategoryTotal>(
+    `SELECT t.category_id, COALESCE(c.name, 'Sem categoria') AS name, c.icon, ABS(SUM(t.amount))::numeric AS total, COUNT(*)::int AS count, c.budget
+     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+     WHERE t.account_id = $1 AND t.invoice_month = $2 AND t.kind = 'expense'
+     GROUP BY t.category_id, c.name, c.icon, c.budget ORDER BY total DESC`,
+    [accountId, monthStart(invoiceMonth)],
+  );
+  return rows;
+}
+
 export type Commitment = { month: string; total: number; count: number };
 
 /** Parcelas já assumidas que ainda vão cair nas próximas faturas. */

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { ArrowDownLeft, ArrowLeftRight, CircleDashed } from 'lucide-react';
+import { useEffect, useState, useTransition } from 'react';
+import { ArrowDownLeft, ArrowLeftRight, CircleDashed, X } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import Link from 'next/link';
 import { formatDateShort, formatMonth, fromISO } from '@/lib/dates';
-import type { Category, Transaction, Trip, TxKind } from '@/lib/types';
+import type { Account, Category, Transaction, Trip, TxKind } from '@/lib/types';
 import { editTransaction, markReviewed, removeTransaction, setCategory, setKind, undoRemove, type ActionState } from '@/app/actions/transactions';
 import { applyRules } from '@/lib/rules';
 import { guessCategory } from '@/lib/quickparse';
@@ -20,8 +20,8 @@ export type ReviewHints = { rules: Rule[]; topByAccount: Record<number, number[]
 
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
-export function TxList({ items, categories, trips, compact = false, hideStatus = false, context, review, groupByDay = false, emptyText = 'Nenhum lançamento.', emptyAction }: {
-  items: Transaction[]; categories: Category[]; trips?: Trip[]; compact?: boolean;
+export function TxList({ items, categories, trips, accounts, compact = false, hideStatus = false, context, review, groupByDay = false, emptyText = 'Nenhum lançamento.', emptyAction }: {
+  items: Transaction[]; categories: Category[]; trips?: Trip[]; accounts?: Account[]; compact?: boolean;
   /** esconde o estado (revisar / sem extrato) quando o título da seção já diz */
   hideStatus?: boolean;
   /** omite o que a tela já mostra: em faturas, a conta e a fatura; em viagens, a viagem */
@@ -43,7 +43,7 @@ export function TxList({ items, categories, trips, compact = false, hideStatus =
   if (!groupByDay) {
     return (
       <ul className="flex flex-col">
-        {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} review={review} />)}
+        {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} accounts={accounts} compact={compact} hideStatus={hideStatus} context={context} review={review} />)}
       </ul>
     );
   }
@@ -60,7 +60,7 @@ export function TxList({ items, categories, trips, compact = false, hideStatus =
               {spent ? <span>{formatBRL(spent)}</span> : null}
             </div>
             <ul className="flex flex-col">
-              {list.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} review={review} hideDate />)}
+              {list.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} accounts={accounts} compact={compact} hideStatus={hideStatus} context={context} review={review} hideDate />)}
             </ul>
           </li>
         );
@@ -69,7 +69,7 @@ export function TxList({ items, categories, trips, compact = false, hideStatus =
   );
 }
 
-function TxRow({ tx, categories, trips, hideStatus, context, review, hideDate = false }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact?: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints; hideDate?: boolean }) {
+function TxRow({ tx, categories, trips, accounts, hideStatus, context, review, hideDate = false }: { tx: Transaction; categories: Category[]; trips?: Trip[]; accounts?: Account[]; compact?: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints; hideDate?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const amountClass = tx.kind === 'transfer' ? 'text-ink-3' : tx.kind === 'income' ? 'text-good' : 'text-ink';
@@ -101,7 +101,7 @@ function TxRow({ tx, categories, trips, hideStatus, context, review, hideDate = 
         </span>
       </button>
       {review && tx.reviewed === false && !open ? <ReviewChips tx={tx} categories={categories} hints={review} pending={pending} start={start} openEditor={() => setOpen(true)} /> : null}
-      {open ? <TxEditor tx={tx} categories={categories} trips={trips} pending={pending} start={start} close={() => setOpen(false)} /> : null}
+      {open ? <TxEditor tx={tx} categories={categories} trips={trips} accounts={accounts} pending={pending} start={start} close={() => setOpen(false)} /> : null}
     </li>
   );
 }
@@ -135,7 +135,7 @@ function ReviewChips({ tx, categories, hints, pending, start, openEditor }: { tx
   );
 }
 
-function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transaction; categories: Category[]; trips?: Trip[]; pending: boolean; start: (fn: () => Promise<void> | void) => void; close: () => void }) {
+function TxEditor({ tx, categories, trips, pending, start, close, accounts }: { tx: Transaction; categories: Category[]; trips?: Trip[]; pending: boolean; start: (fn: () => Promise<void> | void) => void; close: () => void; accounts?: Account[] }) {
   const toast = useToast();
   // toda ação passa por aqui: erro vira aviso em vez de sumir, e o editor só fecha quando deu certo
   const run = async (p: Promise<ActionState>, okText?: string, closeAfter = false) => {
@@ -154,22 +154,40 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
   const [desc, setDesc] = useState(tx.description);
   const [amount, setAmount] = useState(String(Math.abs(tx.amount)).replace('.', ','));
   const [date, setDate] = useState(tx.date);
+  const [notes, setNotes] = useState(tx.notes ?? '');
+  const [accountId, setAccountId] = useState(tx.account_id);
   const [learn, setLearn] = useState(tx.source === 'import');
   const cats = categories.filter((c) => c.kind === (tx.kind === 'income' ? 'income' : 'expense'));
+  const save = () => start(async () => {
+    await run(editTransaction(tx.id, { description: desc, amount, date, notes: notes.trim() || null, accountId: accountId !== tx.account_id ? accountId : undefined }), 'Salvo.', true);
+  });
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [close]);
 
-  return (
-    <div className="mb-3 rounded-xl bg-surface-2 p-3 flex flex-col gap-3 text-[13px]">
+  const body = (
+    <div className="flex flex-col gap-3 text-[13px]" onKeyDown={onKey}>
+      <div className="flex items-start justify-between gap-3 md:hidden">
+        <span className="font-semibold text-[15px] truncate">{tx.description}</span>
+        <button type="button" className="btn btn-ghost btn-sm !p-1.5" onClick={close} aria-label="Fechar"><X size={16} /></button>
+      </div>
       {tx.statement_description && tx.statement_description !== tx.description ? (
         <p className="text-ink-3">No extrato: <span className="text-ink-2">{tx.statement_description}</span></p>
       ) : null}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label className="flex flex-col gap-1 col-span-2">
           <span className="text-ink-3">Descrição</span>
-          <input className="input !py-1.5" value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <input className="input !py-1.5" value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-ink-3">Valor</span>
-          <input className="input !py-1.5 tabular" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="input !py-1.5" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-ink-3">Data</span>
@@ -198,6 +216,11 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
             {cats.map((c) => <option key={c.id} value={c.id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>)}
           </select>
         ) : null}
+        {accounts?.length ? (
+          <select className="input !w-auto !py-1.5" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} aria-label="Conta">
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        ) : null}
         {tx.source === 'import' ? (
           <label className="flex items-center gap-1.5 text-ink-2">
             <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} /> aprender esse padrão
@@ -218,28 +241,34 @@ function TxEditor({ tx, categories, trips, pending, start, close }: { tx: Transa
           ) : null}
         </div>
       ) : null}
+      <label className="flex flex-col gap-1">
+        <span className="text-ink-3">Observação</span>
+        <input className="input !py-1.5" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="opcional" />
+      </label>
       <div className="flex flex-wrap gap-2 justify-between">
         <div className="flex gap-2">
-          <button
-            className="btn btn-primary btn-sm"
-            disabled={pending}
-            onClick={() => start(async () => { await run(editTransaction(tx.id, { description: desc, amount, date }), 'Salvo.', true); })}
-          >
-            Salvar
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={close}>Fechar</button>
+          <button className="btn btn-primary btn-sm" disabled={pending} onClick={save}>Salvar</button>
+          <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={close}>Fechar</button>
         </div>
         <div className="flex gap-2">
           {tx.installment_group ? (
-            <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(true)}>
-              Excluir parcelas
-            </button>
+            <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(true)}>Excluir parcelas</button>
           ) : null}
-          <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(false)}>
-            Excluir
-          </button>
+          <button className="btn btn-ghost btn-sm text-bad" disabled={pending} onClick={() => remove(false)}>Excluir</button>
         </div>
       </div>
+      <p className="hidden md:block text-[11px] text-ink-3">Enter salva, Esc fecha.</p>
     </div>
+  );
+
+  return (
+    <>
+      {/* celular: folha que sobe do rodapé, acima da barra e do teclado */}
+      <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={close}>
+        <div className="absolute inset-x-0 bottom-0 card rounded-b-none p-4 max-h-[85svh] overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }} onClick={(e) => e.stopPropagation()}>{body}</div>
+      </div>
+      {/* desktop: inline, abaixo da linha */}
+      <div className="hidden md:block mb-3 rounded-xl bg-surface-2 p-3">{body}</div>
+    </>
   );
 }

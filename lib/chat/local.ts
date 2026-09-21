@@ -3,6 +3,10 @@ import { formatBRL } from '@/lib/money';
 import { computeInsights } from '@/lib/insights';
 import { getBudgetStatus } from '@/lib/budget';
 import { listTrips, tripStatus } from '@/lib/trips';
+import { quickParse, signedAmount } from '@/lib/quickparse';
+import { listRules } from '@/lib/rules';
+import { createTransaction, listAccounts as listAllAccounts, listCategories as listAllCategories } from '@/lib/queries';
+import { pool } from '@/lib/db';
 import { normalizeText } from '@/lib/rules';
 import {
   categoryAverages, expensesByCategory, futureCommitments, invoiceSummaries, latestAllocation, listAccounts, listCategories,
@@ -65,6 +69,22 @@ export async function answerLocally(question: string): Promise<string> {
   const n = normalizeText(question).replace(/[?!.,;]/g, ' ').replace(/\s+/g, ' ').trim();
   const period = parsePeriod(n);
   const hasMoneyIntent = /\b(viagem|viagens|quanto|gastei|gasto|gastos|paguei|recebi|receita|sobrou|resultado|saldo|patrimonio|investid|fatura|parcela|maior|top|ranking|pendente|revisar|lista|mostra|quais|onde|resumo|insight|como esta|como ta|como anda)\b/.test(n);
+
+  // "lança almoço 42 no crédito", "registra uber 23,50", "anota 120 jantar rico"
+  const launch = /^(lanca|lance|lancar|registra|registrar|anota|anotar|adiciona|adicionar|gastei|paguei)\b\s*(.*)$/.exec(n);
+  if (launch && /\d/.test(launch[2])) {
+    const [accounts, categories, rules] = await Promise.all([listAllAccounts(), listAllCategories(), listRules(pool)]);
+    const phrase = question.replace(/^\s*\S+\s*/, '');
+    const parsed = quickParse(/^(gastei|paguei)/.test(n) ? question : phrase, accounts, categories, rules);
+    if (!parsed) return 'Não achei o valor na frase. Ex.: "lança almoço 42 crédito rico".';
+    if (!parsed.account) return `Não entendi a conta. Diga o nome dela: ${accounts.map((a) => a.name).join(', ')}.`;
+    const created = await createTransaction({
+      accountId: parsed.account.id, date: parsed.date, amount: signedAmount(Math.abs(parsed.amount), parsed.kind, parsed.direction, parsed.account),
+      description: parsed.description, categoryId: parsed.category?.id ?? null, kind: parsed.kind, source: 'chat', installments: parsed.installments,
+    });
+    const t = created[0];
+    return `Registrado: ${t.description}, ${formatBRL(Math.abs(t.amount))}${created.length > 1 ? ` em ${created.length}x` : ''}, ${formatDate(t.date)}, em ${t.account_name}${t.category_name ? ` (${t.category_name})` : ''}${t.trip_name ? `, na viagem ${t.trip_name}` : ''}. Se errei algo, ajuste em Lançamentos.`;
+  }
 
   if (/^(oi|ola|eai|e ai|bom dia|boa tarde|boa noite|ajuda|help|socorro)\b/.test(n) || /o que voce (faz|sabe|responde)|o que da pra perguntar|pode me ajudar/.test(n)) return HELP;
 
@@ -247,6 +267,7 @@ const HELP = `Sem chave de IA, eu respondo perguntas diretas sobre os seus núme
 • como está meu orçamento
 • como está a viagem
 • como está meu mês
+• lança almoço 42 crédito rico (registra o gasto)
 
 E sobre o sistema: como importar extrato, como funciona a fatura, como categorizar, o que é transferência, como instalar no celular.`;
 

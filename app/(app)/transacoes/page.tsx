@@ -68,7 +68,7 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
       />
       <section className="card px-4 py-2">
         <TxList
-          items={page.items} categories={categories} trips={trips} groupByDay
+          items={page.items} categories={categories} trips={trips} accounts={accounts} groupByDay
           emptyText={hasFilter ? 'Nada com esses filtros.' : `Nenhum lançamento em ${formatMonth(month, true).toLowerCase()}.`}
           emptyAction={hasFilter ? { label: 'Limpar filtros', href: `/transacoes?m=${allTime ? 'all' : month}` } : { label: 'Lançar agora', href: '/lancar' }}
         />

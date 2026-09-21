@@ -12,6 +12,8 @@ import { pool } from '@/lib/db';
 import { BudgetBars } from '@/components/BudgetBars';
 import { tripsAround, tripStatus } from '@/lib/trips';
 import { daysUntil, pendingFixedThisMonth, postRecurring, upcoming } from '@/lib/recurring';
+import { onboardingSteps } from '@/lib/onboarding';
+import { Onboarding } from '@/components/Onboarding';
 import { TripCard } from '@/components/TripCard';
 import { StatTile } from '@/components/StatTile';
 import { MonthNav } from '@/components/MonthNav';
@@ -38,6 +40,8 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   ]);
 
   const tripStatuses = await Promise.all((await tripsAround()).map((t) => tripStatus(t)));
+  const onboarding = await onboardingSteps();
+  const showOnboarding = !onboarding.dismissed && onboarding.done < onboarding.steps.length;
   const [next30, fixedPending] = await Promise.all([isCurrentMonth(month) ? upcoming(30) : Promise.resolve([]), isCurrentMonth(month) ? pendingFixedThisMonth() : Promise.resolve({ total: 0, items: [] })]);
   const avgTotal = [...avg.values()].reduce((a, b) => a + b, 0);
   const balance = totals.income - totals.expense;
@@ -107,13 +111,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         <MonthNav month={month} basePath="/" />
       </header>
 
-      {!accounts.length ? (
-        <div className="card p-5 flex flex-col gap-2">
-          <p className="font-semibold">Comece cadastrando suas contas</p>
-          <p className="text-sm text-ink-2">Conta corrente, cartões (com dia de fechamento e vencimento) e corretoras. Depois importe um extrato ou lance gastos pela barra rápida.</p>
-          <Link href="/config" className="btn btn-primary self-start">Cadastrar contas</Link>
-        </div>
-      ) : null}
+      {showOnboarding ? <div className="order-0 lg:order-none"><Onboarding steps={onboarding.steps} done={onboarding.done} /></div> : null}
 
       <section className="order-1 lg:order-none grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatTile label={isCurrent ? 'Livre pra gastar' : 'Sobrou do teto'} value={free} tone={free < 0 ? 'bad' : 'good'} hint={freeHint} />

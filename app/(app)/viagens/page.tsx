@@ -33,7 +33,10 @@ export default async function ViagensPage({ searchParams }: PageProps<'/viagens'
 
       {creating ? (
         <section className="card p-4 flex flex-col gap-3 max-w-2xl">
-          <h2 className="font-semibold">{trips.length ? 'Nova viagem' : 'Cadastre sua primeira viagem'}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">{trips.length ? 'Nova viagem' : 'Cadastre sua primeira viagem'}</h2>
+            {trips.length ? <Link href="/viagens" className="btn btn-ghost btn-sm">Cancelar</Link> : null}
+          </div>
           <TripForm trip={null} />
         </section>
       ) : null}
