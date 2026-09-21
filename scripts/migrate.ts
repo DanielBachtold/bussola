@@ -68,6 +68,7 @@ const statements = [
   `CREATE UNIQUE INDEX IF NOT EXISTS transactions_account_fitid ON transactions(account_id, fitid) WHERE fitid IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS transactions_date ON transactions(date)`,
   `CREATE INDEX IF NOT EXISTS transactions_invoice ON transactions(account_id, invoice_month)`,
+  `CREATE INDEX IF NOT EXISTS transactions_account_date ON transactions(account_id, date)`,
   `CREATE TABLE IF NOT EXISTS category_rules (
     id SERIAL PRIMARY KEY,
     pattern TEXT NOT NULL,

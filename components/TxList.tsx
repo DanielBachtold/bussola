@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { ArrowDownLeft, ArrowLeftRight, CircleDashed } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
-import { formatDateShort, formatMonth } from '@/lib/dates';
+import Link from 'next/link';
+import { formatDateShort, formatMonth, fromISO } from '@/lib/dates';
 import type { Category, Transaction, Trip, TxKind } from '@/lib/types';
 import { editTransaction, markReviewed, removeTransaction, setCategory, setKind, undoRemove, type ActionState } from '@/app/actions/transactions';
 import { applyRules } from '@/lib/rules';
@@ -17,7 +18,9 @@ export type TxListContext = 'invoice' | 'trip';
 /** Sugestões pros chips da revisão: regras + palavras-chave + as categorias mais usadas na conta. */
 export type ReviewHints = { rules: Rule[]; topByAccount: Record<number, number[]> };
 
-export function TxList({ items, categories, trips, compact = false, hideStatus = false, context, review, emptyText = 'Nenhum lançamento.' }: {
+const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+export function TxList({ items, categories, trips, compact = false, hideStatus = false, context, review, groupByDay = false, emptyText = 'Nenhum lançamento.', emptyAction }: {
   items: Transaction[]; categories: Category[]; trips?: Trip[]; compact?: boolean;
   /** esconde o estado (revisar / sem extrato) quando o título da seção já diz */
   hideStatus?: boolean;
@@ -25,17 +28,48 @@ export function TxList({ items, categories, trips, compact = false, hideStatus =
   context?: TxListContext;
   /** na tela de revisão: chips de categoria direto na linha */
   review?: ReviewHints;
+  /** cabeçalho por dia com o subtotal de gastos */
+  groupByDay?: boolean;
   emptyText?: string;
+  emptyAction?: { label: string; href: string };
 }) {
-  if (!items.length) return <p className="text-sm text-ink-3 py-6 text-center">{emptyText}</p>;
+  if (!items.length) {
+    return (
+      <p className="text-sm text-ink-3 py-6 text-center">
+        {emptyText}{emptyAction ? <> <Link href={emptyAction.href} className="text-accent">{emptyAction.label}</Link></> : null}
+      </p>
+    );
+  }
+  if (!groupByDay) {
+    return (
+      <ul className="flex flex-col">
+        {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} review={review} />)}
+      </ul>
+    );
+  }
+  const days = new Map<string, Transaction[]>();
+  for (const t of items) { const k = t.date.slice(0, 10); if (!days.has(k)) days.set(k, []); days.get(k)!.push(t); }
   return (
     <ul className="flex flex-col">
-      {items.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} review={review} />)}
+      {[...days.entries()].map(([day, list]) => {
+        const spent = list.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
+        return (
+          <li key={day} className="flex flex-col">
+            <div className="sticky top-0 z-10 bg-surface flex items-baseline justify-between py-1.5 text-[12px] text-ink-3 hairline first:border-t-0">
+              <span>{WEEKDAYS[fromISO(day).getDay()]} {formatDateShort(day)}</span>
+              {spent ? <span>{formatBRL(spent)}</span> : null}
+            </div>
+            <ul className="flex flex-col">
+              {list.map((t) => <TxRow key={t.id} tx={t} categories={categories} trips={trips} compact={compact} hideStatus={hideStatus} context={context} review={review} hideDate />)}
+            </ul>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-function TxRow({ tx, categories, trips, compact, hideStatus, context, review }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints }) {
+function TxRow({ tx, categories, trips, compact, hideStatus, context, review, hideDate = false }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints; hideDate?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const amountClass = tx.kind === 'transfer' ? 'text-ink-3' : tx.kind === 'income' ? 'text-good' : 'text-ink';
@@ -43,7 +77,7 @@ function TxRow({ tx, categories, trips, compact, hideStatus, context, review }: 
   const status = hideStatus ? null : tx.reviewed === false ? 'revisar' : tx.status === 'pending' && tx.source !== 'import' ? 'sem extrato' : null;
   const noCategory = tx.kind === 'expense' && !tx.category_id;
   const meta = [
-    formatDateShort(tx.date),
+    hideDate ? null : formatDateShort(tx.date),
     tx.kind === 'transfer' ? 'transferência' : tx.category_name,
     context === 'invoice' ? null : tx.account_name,
     context === 'invoice' || !tx.invoice_month ? null : `fatura ${formatMonth(tx.invoice_month)}`,

@@ -55,9 +55,12 @@ export type TxFilter = {
   start?: string;
   end?: string;
   accountId?: number;
-  categoryId?: number;
+  /** id, ou 'none' para "sem categoria" */
+  categoryId?: number | 'none';
   kind?: TxKind;
   search?: string;
+  /** valor exato (busca por "249,90") */
+  amount?: number;
   status?: string;
   reviewed?: boolean;
   invoiceMonth?: string;
@@ -66,7 +69,9 @@ export type TxFilter = {
   offset?: number;
 };
 
-export async function listTransactions(f: TxFilter = {}, db: Queryable = pool): Promise<Transaction[]> {
+export type TxPage = { items: Transaction[]; total: number; expense: number; income: number };
+
+function txWhere(f: TxFilter) {
   const where: string[] = [];
   const params: unknown[] = [];
   const add = (sql: string, v: unknown) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
@@ -75,22 +80,43 @@ export async function listTransactions(f: TxFilter = {}, db: Queryable = pool): 
   if (f.start) add('t.date >= ?', f.start);
   if (f.end) add('t.date <= ?', f.end);
   if (f.accountId) add('t.account_id = ?', f.accountId);
-  if (f.categoryId) add('t.category_id = ?', f.categoryId);
+  if (f.categoryId === 'none') where.push('t.category_id IS NULL');
+  else if (f.categoryId) add('t.category_id = ?', f.categoryId);
   if (f.kind) add('t.kind = ?', f.kind);
   if (f.status) add('t.status = ?', f.status);
   if (typeof f.reviewed === 'boolean') add('t.reviewed = ?', f.reviewed);
   if (f.invoiceMonth) add('t.invoice_month = ?', monthStart(f.invoiceMonth));
   if (f.tripId) add('t.trip_id = ?', f.tripId);
-  if (f.search) {
+  if (f.amount !== undefined) add('ABS(t.amount) = ?', round2(f.amount));
+  else if (f.search) {
     // busca sem acento: "cafe" acha "Café" e vice-versa
     const re = accentInsensitiveRegex(f.search);
     add(`(t.description ~* ? OR t.statement_description ~* $${params.length + 1})`, re);
   }
+  return { clause: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
+}
 
-  const sql = `${TX_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+export async function listTransactions(f: TxFilter = {}, db: Queryable = pool): Promise<Transaction[]> {
+  const { clause, params } = txWhere(f);
+  const sql = `${TX_SELECT} ${clause}
     ORDER BY t.date DESC, t.id DESC LIMIT ${Math.min(f.limit ?? 500, 2000)} OFFSET ${f.offset ?? 0}`;
   const { rows } = await db.query<Transaction>(sql, params);
   return rows;
+}
+
+/** Página de lançamentos com o total e as somas do filtro inteiro (não só da página). */
+export async function pageTransactions(f: TxFilter = {}, db: Queryable = pool): Promise<TxPage> {
+  const { clause, params } = txWhere(f);
+  const [items, agg] = await Promise.all([
+    listTransactions(f, db),
+    db.query<{ total: number; expense: number; income: number }>(
+      `SELECT COUNT(*)::int AS total,
+              COALESCE(ABS(SUM(t.amount) FILTER (WHERE t.kind = 'expense')), 0)::numeric AS expense,
+              COALESCE(SUM(t.amount) FILTER (WHERE t.kind = 'income'), 0)::numeric AS income
+       FROM transactions t ${clause}`, params,
+    ),
+  ]);
+  return { items, total: agg.rows[0]?.total ?? 0, expense: agg.rows[0]?.expense ?? 0, income: agg.rows[0]?.income ?? 0 };
 }
 
 const ACCENT_CLASS: Record<string, string> = {

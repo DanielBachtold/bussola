@@ -17,6 +17,8 @@ export type GroupStatus = {
   spent: number;
   pct: number; // 0..∞, fração do limite já usada
   status: 'ok' | 'warn' | 'over' | 'none' | 'pending'; // pending: meta de aporte ainda em andamento no mês
+  /** quanto ainda cabe por dia até o fim do mês (só no mês corrente, grupos de gasto) */
+  perDayLeft: number | null;
 };
 
 export type BudgetStatus = {
@@ -24,6 +26,9 @@ export type BudgetStatus = {
   base: number;
   baseSource: 'configurada' | 'receita do mês' | 'média de 3 meses' | 'nenhuma';
   threshold: number; // fração (0.8 = avisa aos 80%)
+  /** fração do mês que já passou (0..1), só no mês corrente */
+  elapsedPct: number | null;
+  daysLeft: number;
   totalPercent: number;
   groups: GroupStatus[];
   unassigned: { spent: number; categories: Category[] };
@@ -87,7 +92,11 @@ export async function getBudgetStatus(month: string = currentMonth(), db: Querya
 
   // investimento só cobra no fim do mês (a partir do dia 25) ou em mês já fechado:
   // no começo do mês é normal ainda não ter aportado
-  const investmentDue = month < currentMonth() || (month === currentMonth() && todayDay() >= 25);
+  const isCurrent = month === currentMonth();
+  const investmentDue = month < currentMonth() || (isCurrent && todayDay() >= 25);
+  const daysInMonth = Number(end.slice(8, 10));
+  const elapsedPct = isCurrent ? todayDay() / daysInMonth : null;
+  const daysLeft = isCurrent ? daysInMonth - todayDay() + 1 : 0;
 
   const statuses: GroupStatus[] = groups.map((g) => {
     const categories = cats.filter((c) => c.group_id === g.id);
@@ -99,9 +108,11 @@ export async function getBudgetStatus(month: string = currentMonth(), db: Querya
     let status: GroupStatus['status'] = 'none';
     if (limit > 0) {
       if (g.basis === 'investment') status = pct >= 1 ? 'ok' : !investmentDue ? 'pending' : pct >= threshold ? 'warn' : 'over';
-      else status = pct > 1 ? 'over' : pct >= threshold ? 'warn' : 'ok';
+      // além do limiar fixo, avisa quando o grupo está bem à frente do calendário (70% no dia 5 não é normal)
+      else status = pct > 1 ? 'over' : pct >= threshold || (elapsedPct !== null && pct > elapsedPct + 0.15 && pct >= 0.4) ? 'warn' : 'ok';
     }
-    return { group: g, categories, limit, spent, pct, status };
+    const perDayLeft = g.basis !== 'investment' && isCurrent && daysLeft > 0 && limit > 0 ? Math.max(limit - spent, 0) / daysLeft : null;
+    return { group: g, categories, limit, spent, pct, status, perDayLeft };
   });
 
   const assigned = new Set(cats.filter((c) => c.group_id).map((c) => c.id));
@@ -120,7 +131,7 @@ export async function getBudgetStatus(month: string = currentMonth(), db: Querya
   }
 
   return {
-    month, base, baseSource, threshold,
+    month, base, baseSource, threshold, elapsedPct, daysLeft,
     totalPercent: groups.reduce((a, g) => a + Number(g.percent), 0),
     groups: statuses,
     unassigned: { spent: unassignedSpent, categories: unassignedCats },
