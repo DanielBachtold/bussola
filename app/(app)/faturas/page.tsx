@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { addMonths, daysBetween, formatDate, formatMonth, invoiceDates, openInvoiceMonth, todayISO } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
-import { futureCommitments, invoiceByCategory, invoicePayments, invoiceSummaries, listAccounts, listCategories, listTransactions } from '@/lib/queries';
+import { futureCommitments, invoiceByCategory, invoicePayments, invoiceSummaries, listAccounts, listCategories, listTransactions, unpaidClosedTotal } from '@/lib/queries';
 import { BarList } from '@/components/charts/BarList';
 import { PayForm } from './PayForm';
 import { TxList } from '@/components/TxList';
@@ -41,10 +41,10 @@ export default async function FaturasPage({ searchParams }: PageProps<'/faturas'
   const { closes, due } = invoiceDates(month, card.closing_day!, card.due_day!);
   const status = month < openMonth ? 'fechada' : month === openMonth ? 'aberta' : 'futura';
   const installmentsHere = items.filter((t) => t.installment_group).length;
-  const payment = status === 'fechada' ? await invoicePayments(card.id, closes, due) : { paid: 0, paidAt: null };
+  const payment = status === 'fechada' ? await invoicePayments(card.id, month, closes, due) : { paid: 0, paidAt: null };
   const paid = total > 0 && payment.paid >= total - 1;
-  // limite disponível: o que ainda vai ser cobrado (fatura aberta, futuras e fechadas sem pagamento) contra o limite
-  const owed = summaries.filter((s) => s.invoice_month >= openMonth).reduce((a, s) => a + s.total, 0) + (status === 'fechada' && !paid ? total - payment.paid : 0);
+  // limite disponível: aberta + futuras + o que falta pagar de TODAS as fechadas (não depende do mês exibido)
+  const owed = summaries.filter((s) => s.invoice_month >= openMonth).reduce((a, s) => a + s.total, 0) + await unpaidClosedTotal(card.id, card.closing_day!, card.due_day!, openMonth);
   const available = card.credit_limit ? card.credit_limit - owed : null;
   const catItems = byCat.slice(0, 5).map((c) => ({ label: `${c.icon ?? ''} ${c.name}`.trim(), value: c.total, hint: `${c.count}` }));
   if (byCat.length > 5) catItems.push({ label: `Outras ${byCat.length - 5}`, value: byCat.slice(5).reduce((a, c) => a + c.total, 0), hint: `${byCat.slice(5).reduce((a, c) => a + c.count, 0)}` });

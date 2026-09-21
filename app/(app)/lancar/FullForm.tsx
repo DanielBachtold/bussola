@@ -9,7 +9,10 @@ export function FullForm({ accounts, categories, trips = [] }: { accounts: Accou
   const [state, action, pending] = useActionState(addTransaction, undefined);
   const [kind, setKind] = useState<TxKind>('expense');
   const [accountId, setAccountId] = useState<string>(String(accounts[0]?.id ?? ''));
+  const [toAccountId, setToAccountId] = useState<string>(String(accounts[1]?.id ?? ''));
   const account = accounts.find((a) => String(a.id) === accountId);
+  // origem e destino nunca podem ser a mesma conta: ao trocar a origem, o destino pula pra outra
+  const changeFrom = (v: string) => { setAccountId(v); if (v === toAccountId) setToAccountId(String(accounts.find((a) => String(a.id) !== v)?.id ?? '')); };
   const cats = categories.filter((c) => c.kind === (kind === 'income' ? 'income' : 'expense'));
 
   return (
@@ -39,14 +42,14 @@ export function FullForm({ accounts, categories, trips = [] }: { accounts: Accou
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-ink-3">{kind === 'transfer' ? 'Sai de' : 'Conta'}</span>
-        <select name="account_id" className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <select name="account_id" className="input" value={accountId} onChange={(e) => changeFrom(e.target.value)}>
           {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </label>
       {kind === 'transfer' ? (
         <label className="flex flex-col gap-1">
           <span className="text-ink-3">Entra em</span>
-          <select name="to_account_id" className="input" defaultValue={accounts.find((a) => String(a.id) !== accountId)?.id ?? ''}>
+          <select name="to_account_id" className="input" value={toAccountId} onChange={(e) => setToAccountId(e.target.value)}>
             <option value="">Só registrar a saída</option>
             {accounts.filter((a) => String(a.id) !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { ArrowDownLeft, ArrowLeftRight, CircleDashed, X } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import Link from 'next/link';
@@ -165,12 +165,6 @@ function TxEditor({ tx, categories, trips, pending, start, close, accounts }: { 
     if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); save(); }
     if (e.key === 'Escape') { e.preventDefault(); close(); }
   };
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [close]);
-
   const body = (
     <div className="flex flex-col gap-3 text-[13px]" onKeyDown={onKey}>
       <div className="flex items-start justify-between gap-3 md:hidden">
@@ -218,6 +212,7 @@ function TxEditor({ tx, categories, trips, pending, start, close, accounts }: { 
         ) : null}
         {accounts?.length ? (
           <select className="input !w-auto !py-1.5" value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} aria-label="Conta">
+            {!accounts.some((a) => a.id === tx.account_id) ? <option value={tx.account_id}>{tx.account_name} (arquivada)</option> : null}
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         ) : null}

@@ -257,8 +257,8 @@ export async function matchManually(manualId: number, importedId: number): Promi
     await db.query(`DELETE FROM transactions WHERE id = $1`, [importedId]);
     await db.query(
       `UPDATE transactions SET status = 'reconciled', fitid = $2, statement_description = $3, date = $4, amount = $5, invoice_month = $6, reviewed = TRUE,
-              category_id = COALESCE(category_id, $7), updated_at = NOW() WHERE id = $1`,
-      [manualId, imported.fitid, imported.statement_description ?? imported.description, imported.date, imported.amount, imported.invoice_month, imported.category_id],
+              category_id = COALESCE(category_id, $7), reconciled_import_id = $8, updated_at = NOW() WHERE id = $1`,
+      [manualId, imported.fitid, imported.statement_description ?? imported.description, imported.date, imported.amount, imported.invoice_month, imported.category_id, imported.import_id],
     );
   });
   revalidateAll();

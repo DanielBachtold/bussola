@@ -71,11 +71,11 @@ export async function answerLocally(question: string): Promise<string> {
   const hasMoneyIntent = /\b(viagem|viagens|quanto|gastei|gasto|gastos|paguei|recebi|receita|sobrou|resultado|saldo|patrimonio|investid|fatura|parcela|maior|top|ranking|pendente|revisar|lista|mostra|quais|onde|resumo|insight|como esta|como ta|como anda)\b/.test(n);
 
   // "lança almoço 42 no crédito", "registra uber 23,50", "anota 120 jantar rico"
-  const launch = /^(lanca|lance|lancar|registra|registrar|anota|anotar|adiciona|adicionar|gastei|paguei)\b\s*(.*)$/.exec(n);
-  if (launch && /\d/.test(launch[2])) {
+  const launch = /^(lanca|lance|lancar|registra|registrar|anota|anotar|adiciona|adicionar)\b\s*(.*)$/.exec(n);
+  if (launch && /\d/.test(launch[2]) && !/\b(quanto|quantos|mais de|menos de|mes passado|semana|ultimos?)\b/.test(n)) {
     const [accounts, categories, rules] = await Promise.all([listAllAccounts(), listAllCategories(), listRules(pool)]);
     const phrase = question.replace(/^\s*\S+\s*/, '');
-    const parsed = quickParse(/^(gastei|paguei)/.test(n) ? question : phrase, accounts, categories, rules);
+    const parsed = quickParse(phrase, accounts, categories, rules);
     if (!parsed) return 'Não achei o valor na frase. Ex.: "lança almoço 42 crédito rico".';
     if (!parsed.account) return `Não entendi a conta. Diga o nome dela: ${accounts.map((a) => a.name).join(', ')}.`;
     const created = await createTransaction({

@@ -74,6 +74,8 @@ export type Transaction = {
   trip_excluded: boolean;
   trip_name: string | null;
   recurring_id: number | null;
+  import_id: number | null;
+  reconciled_import_id: number | null;
   account_name: string;
   account_kind: AccountKind;
   category_name: string | null;

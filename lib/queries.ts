@@ -1,5 +1,5 @@
 import { pool, type Queryable } from './db';
-import { addMonths, addMonthsToDate, currentMonth, invoiceMonthFor, monthEnd, monthStart, todayISO } from './dates';
+import { addMonths, addMonthsToDate, currentMonth, invoiceDates, invoiceMonthFor, monthEnd, monthStart, todayISO } from './dates';
 import { escapeRegex, normalizeText } from './rules';
 import { round2 } from './money';
 import type { Account, Category, Snapshot, Transaction, TxKind, TxSource } from './types';
@@ -433,13 +433,29 @@ export async function invoiceSummaries(accountId?: number, db: Queryable = pool)
 }
 
 /** Quanto já foi pago (transferências que entraram no cartão) entre o fechamento e 15 dias depois do vencimento. */
-export async function invoicePayments(accountId: number, closes: string, due: string, db: Queryable = pool): Promise<{ paid: number; paidAt: string | null }> {
+export async function invoicePayments(accountId: number, invoiceMonth: string, closes: string, due: string, db: Queryable = pool): Promise<{ paid: number; paidAt: string | null }> {
+  // pagamentos registrados pela tela ficam amarrados à fatura (invoice_month); os importados do extrato
+  // ("PAGAMENTO RECEBIDO") não têm vínculo e entram pela janela de datas entre o fechamento e o vencimento
   const { rows } = await db.query<{ paid: number; paid_at: string | null }>(
     `SELECT COALESCE(SUM(amount),0)::numeric AS paid, MAX(date) AS paid_at FROM transactions
-     WHERE account_id = $1 AND kind = 'transfer' AND amount > 0 AND date >= $2::date - INTERVAL '3 days' AND date <= $3::date + INTERVAL '15 days'`,
-    [accountId, closes, due],
+     WHERE account_id = $1 AND kind = 'transfer' AND amount > 0
+       AND (invoice_month = $2::date
+            OR (source = 'import' AND date >= $3::date - INTERVAL '3 days' AND date <= $4::date + INTERVAL '15 days'))`,
+    [accountId, monthStart(invoiceMonth), closes, due],
   );
   return { paid: rows[0]?.paid ?? 0, paidAt: rows[0]?.paid_at ?? null };
+}
+
+/** Quanto ainda falta pagar em todas as faturas já fechadas do cartão (independe do mês exibido). */
+export async function unpaidClosedTotal(accountId: number, closingDay: number, dueDay: number, openMonth: string, db: Queryable = pool): Promise<number> {
+  const summaries = (await invoiceSummaries(accountId, db)).filter((s) => s.invoice_month < openMonth);
+  let owed = 0;
+  for (const s of summaries) {
+    const { closes, due } = invoiceDates(s.invoice_month, closingDay, dueDay);
+    const { paid } = await invoicePayments(accountId, s.invoice_month, closes, due, db);
+    owed += Math.max(s.total - paid, 0);
+  }
+  return owed;
 }
 
 /** Gasto por categoria dentro de uma fatura. */

@@ -33,6 +33,7 @@ export async function saveTrip(_prev: ActionState | undefined, formData: FormDat
       const { rowCount } = await pool.query(
         `UPDATE transactions t SET trip_id = $1
          WHERE t.kind = 'expense' AND t.trip_id IS NULL AND t.date BETWEEN $2 AND $3
+           AND t.recurring_id IS NULL AND (t.installment_group IS NULL OR t.installment_n = 1)
            AND (t.category_id IS NULL OR t.category_id NOT IN (SELECT id FROM categories WHERE fixed = TRUE))`,
         [rows[0].id, start, end],
       ).then((r) => ({ rowCount: r.rowCount ?? 0 })).catch(() => ({ rowCount: 0 }));

@@ -11,7 +11,7 @@ export async function onboardingSteps(db: Queryable = pool): Promise<{ steps: St
   const [{ rows: acc }, { rows: rec }, { rows: tx }, { rows: imp }, income, dismissed] = await Promise.all([
     db.query<{ kind: string; closing_day: number | null }>(`SELECT kind, closing_day FROM accounts WHERE archived = FALSE`),
     db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM recurring_rules WHERE active = TRUE`),
-    db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM transactions WHERE source IN ('manual','chat')`),
+    db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM transactions WHERE source IN ('manual','chat') AND recurring_id IS NULL AND kind = 'expense'`),
     db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM imports`),
     getSetting('monthly_income', db),
     getSetting('onboarding_dismissed', db),
