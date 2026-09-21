@@ -13,12 +13,14 @@ export function parseCSV(raw: string): ParsedStatement {
 
   const header = rows[0].map((h) => normalize(h));
   const idx = {
-    date: findCol(header, ['data', 'date', 'dt']),
-    desc: findCol(header, ['descri', 'histor', 'lancamento', 'title', 'memo', 'estabelecimento', 'name', 'detalhe']),
-    amount: findCol(header, ['valor', 'amount', 'value', 'vlr']),
+    date: findCol(header, ['data', 'date', 'dt', 'data da compra', 'data do lancamento']),
+    // "detalhes" antes de "lancamento": no Banco do Brasil, Lançamento é o tipo e Detalhes é o estabelecimento
+    desc: findCol(header, ['descricao', 'descri', 'historico', 'histor', 'detalhes', 'detalhe', 'estabelecimento', 'title', 'memo', 'name', 'lancamento']),
+    amount: findAmountCol(header),
     debit: findCol(header, ['debito', 'saida', 'debit']),
     credit: findCol(header, ['credito', 'entrada', 'credit']),
-    id: findCol(header, ['identificador', 'id', 'fitid']),
+    // id só por nome exato: "quantidade", "cidade" e "validade" contêm "id"
+    id: header.findIndex((h) => ['identificador', 'id', 'fitid', 'id da transacao', 'transaction id'].includes(h)),
   };
   if (idx.date < 0 || idx.desc < 0 || (idx.amount < 0 && idx.debit < 0 && idx.credit < 0)) {
     throw new Error(`Não reconheci as colunas do CSV. Cabeçalho: ${rows[0].join(' | ')}`);
@@ -87,6 +89,15 @@ function normalize(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
+/** Coluna de valor em reais: se houver "Valor (US$)" e "Valor (R$)", fica com a de reais. */
+function findAmountCol(header: string[]): number {
+  const candidates = header
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => /valor|amount|value|vlr/.test(h) && !/us\$|usd|dolar|cotacao|taxa/.test(h));
+  if (!candidates.length) return -1;
+  return (candidates.find(({ h }) => /r\$|brl|reais/.test(h)) ?? candidates.find(({ h }) => ['valor', 'amount', 'value', 'vlr'].includes(h)) ?? candidates[0]).i;
+}
+
 function findCol(header: string[], candidates: string[]): number {
   for (const c of candidates) {
     const i = header.findIndex((h) => h === c);
@@ -101,11 +112,13 @@ function findCol(header: string[], candidates: string[]): number {
 
 function parseDate(s: string): string | null {
   const t = s.trim();
-  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(t);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(t);
-  if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  // 5/9/2026, 05-09-2026, 05.09.26
+  m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(t);
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
   return null;
 }

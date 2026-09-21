@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { addMonths, currentMonth, formatMonth, invoiceDates, monthEnd, monthStart, formatDate } from '@/lib/dates';
+import { addMonths, currentMonth, formatMonth, invoiceDates, monthEnd, monthStart, formatDate, openInvoiceMonth } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import {
   categoryAverages, dailyCumulative, expensesByCategory, futureCommitments, invoiceSummaries,
   listAccounts, listCategories, listTransactions, monthTotals, monthlySeries, latestAllocation,
 } from '@/lib/queries';
 import { computeInsights } from '@/lib/insights';
+import { monthParam } from '@/lib/params';
 import { getBudgetStatus } from '@/lib/budget';
 import { BudgetBars } from '@/components/BudgetBars';
 import { tripsAround, tripStatus } from '@/lib/trips';
@@ -17,9 +18,12 @@ import { CumulativeChart } from '@/components/charts/CumulativeChart';
 import { MonthlyChart } from '@/components/charts/MonthlyChart';
 import { TxList } from '@/components/TxList';
 
+import { requireSession } from '@/lib/session';
+
 export default async function Dashboard({ searchParams }: PageProps<'/'>) {
+  await requireSession();
   const sp = await searchParams;
-  const month = typeof sp.m === 'string' && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : currentMonth();
+  const month = monthParam(sp.m) ?? currentMonth();
   const prevMonth = addMonths(month, -1);
 
   const [totals, prevTotals, byCat, avg, daily, series, recent, accounts, categories, insights, commitments, invoices, allocation, budget] = await Promise.all([
@@ -38,8 +42,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   // fatura "aberta" de cada cartão: a que fecha neste mês ou no próximo
   const cards = accounts.filter((a) => a.kind === 'credit_card' && a.closing_day && a.due_day);
   const openInvoices = cards.map((card) => {
-    const today = new Date();
-    const m = today.getDate() > card.closing_day! ? addMonths(currentMonth(), 1) : currentMonth();
+    const m = openInvoiceMonth(card.closing_day!);
     const inv = invoices.find((i) => i.account_id === card.id && i.invoice_month === m);
     const { closes, due } = invoiceDates(m, card.closing_day!, card.due_day!);
     return { card, month: m, total: inv?.total ?? 0, closes, due };

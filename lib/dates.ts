@@ -1,7 +1,23 @@
-/** Datas como string ISO (YYYY-MM-DD), sempre em horário local, sem fuso. */
+/**
+ * Datas como string ISO (YYYY-MM-DD). "Hoje" é sempre no fuso do usuário
+ * (APP_TZ, padrão America/Sao_Paulo), não no fuso do servidor: na Vercel o
+ * servidor roda em UTC e à noite já seria "amanhã".
+ */
+
+const APP_TZ = process.env.NEXT_PUBLIC_APP_TZ || process.env.APP_TZ || 'America/Sao_Paulo';
 
 export function todayISO(): string {
-  return toISO(new Date());
+  try {
+    // en-CA formata como YYYY-MM-DD
+    return new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch {
+    return toISO(new Date());
+  }
+}
+
+/** Dia do mês de hoje no fuso do app. */
+export function todayDay(): number {
+  return Number(todayISO().slice(8, 10));
 }
 
 export function toISO(d: Date): string {
@@ -41,6 +57,14 @@ export function addMonthsToDate(iso: string, n: number): string {
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(d.getDate(), lastDay));
   return toISO(target);
+}
+
+/** true se ano-mês-dia formam uma data real (rejeita 31/02, 15/13...). */
+export function isValidISO(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(y, m, 0).getDate();
 }
 
 export function monthEnd(month: string): string {
@@ -83,6 +107,11 @@ export function invoiceMonthFor(purchaseISO: string, closingDay: number): string
   const d = fromISO(purchaseISO);
   const month = toISO(d).slice(0, 7);
   return d.getDate() > closingDay ? addMonths(month, 1) : month;
+}
+
+/** Fatura "aberta" hoje: a que ainda vai fechar (depois do dia de fechamento, é a do mês seguinte). */
+export function openInvoiceMonth(closingDay: number): string {
+  return todayDay() > closingDay ? addMonths(currentMonth(), 1) : currentMonth();
 }
 
 /** Datas de fechamento e vencimento de uma fatura identificada pelo mês de fechamento. */

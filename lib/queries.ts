@@ -1,5 +1,6 @@
 import { pool, type Queryable } from './db';
 import { addMonths, addMonthsToDate, currentMonth, invoiceMonthFor, monthEnd, monthStart, todayISO } from './dates';
+import { escapeRegex, normalizeText } from './rules';
 import { round2 } from './money';
 import type { Account, Category, Snapshot, Transaction, TxKind, TxSource } from './types';
 
@@ -80,12 +81,28 @@ export async function listTransactions(f: TxFilter = {}, db: Queryable = pool): 
   if (typeof f.reviewed === 'boolean') add('t.reviewed = ?', f.reviewed);
   if (f.invoiceMonth) add('t.invoice_month = ?', monthStart(f.invoiceMonth));
   if (f.tripId) add('t.trip_id = ?', f.tripId);
-  if (f.search) add(`(t.description ILIKE ? OR t.statement_description ILIKE $${params.length + 1})`, `%${f.search}%`);
+  if (f.search) {
+    // busca sem acento: "cafe" acha "Café" e vice-versa
+    const re = accentInsensitiveRegex(f.search);
+    add(`(t.description ~* ? OR t.statement_description ~* $${params.length + 1})`, re);
+  }
 
   const sql = `${TX_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY t.date DESC, t.id DESC LIMIT ${Math.min(f.limit ?? 500, 2000)} OFFSET ${f.offset ?? 0}`;
   const { rows } = await db.query<Transaction>(sql, params);
   return rows;
+}
+
+const ACCENT_CLASS: Record<string, string> = {
+  a: '[aáàâãä]', e: '[eéèêë]', i: '[iíìîï]', o: '[oóòôõö]', u: '[uúùûü]', c: '[cç]', n: '[nñ]',
+};
+
+/** Regex POSIX (para ~*) que casa o termo ignorando acentos dos dois lados. */
+export function accentInsensitiveRegex(term: string): string {
+  return normalizeText(term)
+    .split('')
+    .map((ch) => ACCENT_CLASS[ch] ?? escapeRegex(ch))
+    .join('');
 }
 
 export async function getTransaction(id: number, db: Queryable = pool): Promise<Transaction | null> {
@@ -133,6 +150,11 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
     }
   }
 
+  // a fatura é definida uma vez pela data da compra e avança um mês por parcela.
+  // Recalcular a partir da data de cada parcela erra quando o dia é clampado
+  // (compra dia 31, fechamento 30: a parcela de fevereiro cairia em fevereiro de novo).
+  const firstInvoice = account.kind === 'credit_card' && account.closing_day ? invoiceMonthFor(input.date, account.closing_day) : null;
+
   const group = total > 1 ? crypto.randomUUID() : null;
   const cents = Math.round(Math.abs(input.amount) * 100);
   const base = Math.floor(cents / total);
@@ -143,9 +165,7 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
     const date = addMonthsToDate(input.date, i);
     const partCents = base + (i === total - 1 ? remainder : 0);
     const amount = round2((sign * partCents) / 100);
-    const invoiceMonth = account.kind === 'credit_card' && account.closing_day
-      ? monthStart(invoiceMonthFor(date, account.closing_day))
-      : null;
+    const invoiceMonth = firstInvoice ? monthStart(addMonths(firstInvoice, i)) : null;
     const description = total > 1 ? `${input.description} (${i + 1}/${total})` : input.description;
     const { rows } = await db.query(
       `INSERT INTO transactions
@@ -349,7 +369,7 @@ export async function pendingReview(db: Queryable = pool) {
     `${TX_SELECT}
      WHERE t.status = 'pending' AND t.source IN ('manual','chat')
        AND EXISTS (
-         SELECT 1 FROM imports i WHERE i.account_id = t.account_id AND i.period_end >= t.date + INTERVAL '3 days'
+         SELECT 1 FROM imports i WHERE i.account_id = t.account_id AND i.period_end >= t.date + INTERVAL '4 days'
        )
      ORDER BY t.date DESC LIMIT 300`,
   );
@@ -394,10 +414,15 @@ export async function netWorthSeries(db: Queryable = pool): Promise<NetWorthPoin
   return rows.map((r) => ({ month: r.month, total: r.total, contributions: contrib.find((c) => c.month === r.month)?.total ?? 0 }));
 }
 
+/** Posição mais recente de cada ativo (cada um no seu último mês registrado). */
 export async function latestAllocation(db: Queryable = pool): Promise<Snapshot[]> {
   const { rows } = await db.query<Snapshot>(
-    `SELECT s.*, a.name AS account_name FROM investment_snapshots s JOIN accounts a ON a.id = s.account_id
-     WHERE s.month = (SELECT MAX(month) FROM investment_snapshots) ORDER BY s.balance DESC`,
+    `SELECT * FROM (
+       SELECT DISTINCT ON (s.account_id, s.asset) s.*, a.name AS account_name
+       FROM investment_snapshots s JOIN accounts a ON a.id = s.account_id
+       WHERE a.archived = FALSE
+       ORDER BY s.account_id, s.asset, s.month DESC
+     ) latest ORDER BY balance DESC`,
   );
   return rows;
 }

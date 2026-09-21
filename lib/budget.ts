@@ -1,5 +1,5 @@
 import { pool, type Queryable } from './db';
-import { addMonths, currentMonth, monthEnd, monthStart } from './dates';
+import { addMonths, currentMonth, monthEnd, monthStart, todayDay } from './dates';
 import { formatBRL } from './money';
 import type { BudgetGroup, Category } from './types';
 
@@ -87,8 +87,7 @@ export async function getBudgetStatus(month: string = currentMonth(), db: Querya
 
   // investimento só cobra no fim do mês (a partir do dia 25) ou em mês já fechado:
   // no começo do mês é normal ainda não ter aportado
-  const today = new Date();
-  const investmentDue = month < currentMonth() || (month === currentMonth() && today.getDate() >= 25);
+  const investmentDue = month < currentMonth() || (month === currentMonth() && todayDay() >= 25);
 
   const statuses: GroupStatus[] = groups.map((g) => {
     const categories = cats.filter((c) => c.group_id === g.id);

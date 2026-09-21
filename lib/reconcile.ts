@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { withTransaction } from './db';
-import { daysBetween, invoiceMonthFor, monthStart } from './dates';
+import { addMonths, daysBetween, invoiceMonthFor, monthStart } from './dates';
 import { applyRules, listRules } from './rules';
 import { createTransaction, getAccount } from './queries';
 import type { ParsedStatement, StatementLine } from './statement';
@@ -24,6 +25,23 @@ export type ImportPreview = {
 const MATCH_WINDOW_DAYS = 4;
 
 /**
+ * Linhas sem FITID (CSV) ganham um identificador determinístico a partir de
+ * data, valor e descrição, com um contador pra duas compras iguais no mesmo
+ * dia. Assim reimportar o mesmo CSV não duplica nada.
+ */
+function withSyntheticIds(lines: StatementLine[]): StatementLine[] {
+  const seen = new Map<string, number>();
+  return lines.map((l) => {
+    if (l.fitid) return l;
+    const base = `${l.date}|${l.amount.toFixed(2)}|${l.description.toLowerCase().replace(/\s+/g, ' ').trim()}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    const hash = createHash('sha1').update(base).digest('hex').slice(0, 16);
+    return { ...l, fitid: `h:${hash}${n > 1 ? `#${n}` : ''}` };
+  });
+}
+
+/**
  * Cruza o extrato com o que já existe na conta, sem gravar nada:
  * - fitid já importado  -> duplicate (ignora)
  * - lançamento manual pendente com mesmo valor e data próxima -> match
@@ -34,7 +52,7 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
   if (!account) throw new Error('Conta não encontrada.');
   const rules = await listRules(db);
 
-  const lines = statement.lines.map((l) => ({ ...l, amount: invertSigns ? -l.amount : l.amount }));
+  const lines = withSyntheticIds(statement.lines.map((l) => ({ ...l, amount: invertSigns ? -l.amount : l.amount })));
   const dates = lines.map((l) => l.date).sort();
   const start = dates[0], end = dates[dates.length - 1];
 
@@ -55,11 +73,14 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
   const catName = (id: number | null) => cats.find((c) => c.id === id)?.name ?? null;
 
   const out: PreviewLine[] = [];
+  const seenInFile = new Set<string>();
   for (const line of lines) {
-    if (line.fitid && known.has(line.fitid)) {
+    // já no banco, ou repetida dentro do próprio arquivo (o índice único derrubaria a importação)
+    if (line.fitid && (known.has(line.fitid) || seenInFile.has(line.fitid))) {
       out.push({ ...line, outcome: 'duplicate', matchId: null, matchDescription: null, categoryId: null, categoryName: null, kind: 'expense' });
       continue;
     }
+    if (line.fitid) seenInFile.add(line.fitid);
     // melhor candidato: mesmo valor, data mais próxima
     let best: (typeof pending)[number] | null = null;
     let bestDist = Infinity;
@@ -142,12 +163,30 @@ export async function commitImport(accountId: number, filename: string, statemen
   });
 }
 
-/** Recalcula a fatura de todas as compras de um cartão (após mudar o dia de fechamento). */
+/**
+ * Recalcula a fatura de todas as compras de uma conta (após mudar o dia de
+ * fechamento ou o tipo da conta). Parcelas seguem a primeira do grupo.
+ */
 export async function recomputeInvoices(accountId: number, db: PoolClient) {
   const account = await getAccount(accountId, db);
-  if (!account || account.kind !== 'credit_card' || !account.closing_day) return;
-  const { rows } = await db.query<{ id: number; date: string }>(`SELECT id, date FROM transactions WHERE account_id = $1`, [accountId]);
+  if (!account) return;
+  if (account.kind !== 'credit_card' || !account.closing_day) {
+    await db.query(`UPDATE transactions SET invoice_month = NULL WHERE account_id = $1`, [accountId]);
+    return;
+  }
+  const closing = account.closing_day;
+  const { rows } = await db.query<{ id: number; date: string; installment_group: string | null; installment_n: number | null }>(
+    `SELECT id, date, installment_group, installment_n FROM transactions WHERE account_id = $1`, [accountId],
+  );
+  const firstDateOfGroup = new Map<string, string>();
   for (const r of rows) {
-    await db.query(`UPDATE transactions SET invoice_month = $2 WHERE id = $1`, [r.id, monthStart(invoiceMonthFor(r.date, account.closing_day))]);
+    if (r.installment_group && r.installment_n === 1) firstDateOfGroup.set(r.installment_group, r.date);
+  }
+  for (const r of rows) {
+    let month: string;
+    const first = r.installment_group ? firstDateOfGroup.get(r.installment_group) : undefined;
+    if (r.installment_group && first && r.installment_n) month = addMonths(invoiceMonthFor(first, closing), r.installment_n - 1);
+    else month = invoiceMonthFor(r.date, closing);
+    await db.query(`UPDATE transactions SET invoice_month = $2 WHERE id = $1`, [r.id, monthStart(month)]);
   }
 }

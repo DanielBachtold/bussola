@@ -5,7 +5,10 @@ import { ImportForm } from './ImportForm';
 
 export const metadata = { title: 'Importar extrato' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function ImportarPage() {
+  await requireSession();
   const accounts = (await listAccounts()).filter((a) => a.kind !== 'investment');
   const { rows: history } = await pool.query<{ id: number; filename: string; account_name: string; period_start: string | null; period_end: string | null; matched: number; inserted: number; skipped: number; created_at: string }>(
     `SELECT i.*, a.name AS account_name FROM imports i JOIN accounts a ON a.id = i.account_id ORDER BY i.id DESC LIMIT 12`,

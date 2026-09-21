@@ -1,4 +1,4 @@
-import { addMonths, currentMonth, formatDate, formatMonth, invoiceDates, monthEnd, monthStart, todayISO, toISO, fromISO } from '@/lib/dates';
+import { addMonths, currentMonth, formatDate, formatMonth, invoiceDates, monthEnd, monthStart, openInvoiceMonth, todayISO, toISO, fromISO } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import { computeInsights } from '@/lib/insights';
 import { getBudgetStatus } from '@/lib/budget';
@@ -20,17 +20,20 @@ type Period = { start: string; end: string; label: string };
 const MONTHS = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
-export function parsePeriod(n: string): Period {
+export function parsePeriod(n: string, opts: { preferFuture?: boolean } = {}): Period {
   const today = todayISO();
   const cm = currentMonth();
+  const curYear = Number(cm.slice(0, 4));
   let m: RegExpExecArray | null;
 
   if (/\bhoje\b/.test(n)) return { start: today, end: today, label: 'hoje' };
   if (/\bontem\b/.test(n)) { const d = addDays(today, -1); return { start: d, end: d, label: 'ontem' }; }
   if ((m = /ultim[oa]s?\s+(\d+)\s+dias?/.exec(n))) { const s = addDays(today, -Number(m[1]) + 1); return { start: s, end: today, label: `últimos ${m[1]} dias` }; }
+  if (/\bsemana\s+passada\b/.test(n)) { const s = addDays(today, -13); return { start: s, end: addDays(today, -7), label: 'na semana passada' }; }
   if (/\b(essa|esta|nesta|nessa)\s+semana\b|\bsemana\b/.test(n)) { const s = addDays(today, -6); return { start: s, end: today, label: 'últimos 7 dias' }; }
   if ((m = /ultim[oa]s?\s+(\d+)\s+mes(es)?/.exec(n))) { const k = Number(m[1]); return { start: monthStart(addMonths(cm, -(k - 1))), end: today, label: `últimos ${k} meses` }; }
   if (/\b(mes|mês)\s+passado\b|\bmes\s+anterior\b/.test(n)) { const p = addMonths(cm, -1); return { start: monthStart(p), end: monthEnd(p), label: formatMonth(p, true).toLowerCase() }; }
+  if (/\bano\s+passado\b|\bano\s+anterior\b/.test(n)) { const y = curYear - 1; return { start: `${y}-01-01`, end: `${y}-12-31`, label: `em ${y}` }; }
   if ((m = /\b(\d{4})-(\d{2})\b/.exec(n))) { const mo = `${m[1]}-${m[2]}`; return { start: monthStart(mo), end: monthEnd(mo), label: formatMonth(mo, true).toLowerCase() }; }
   if ((m = /\b(\d{1,2})\/(\d{4})\b/.exec(n))) { const mo = `${m[2]}-${m[1].padStart(2, '0')}`; return { start: monthStart(mo), end: monthEnd(mo), label: formatMonth(mo, true).toLowerCase() }; }
   for (let i = 0; i < 12; i++) {
@@ -38,23 +41,25 @@ export function parsePeriod(n: string): Period {
     const mm = re.exec(n);
     if (mm) {
       const yRaw = mm[1] ?? mm[2] ?? mm[3];
-      let year = Number(cm.slice(0, 4));
+      let year = curYear;
       if (yRaw) year = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
-      else if (i + 1 > Number(cm.slice(5, 7))) year -= 1;
+      // "gastei em dezembro" em setembro é o dezembro passado; "fatura de outubro" é o outubro que vem
+      else if (i + 1 > Number(cm.slice(5, 7)) && !opts.preferFuture) year -= 1;
       const mo = `${year}-${String(i + 1).padStart(2, '0')}`;
       return { start: monthStart(mo), end: monthEnd(mo), label: formatMonth(mo, true).toLowerCase() };
     }
   }
-  if ((m = /\b(esse|este|neste|nesse|no)\s+ano\b|\bem\s+(\d{4})\b|\b(\d{4})\b/.exec(n))) {
-    const y = m[2] ?? m[3] ?? cm.slice(0, 4);
-    return { start: `${y}-01-01`, end: y === cm.slice(0, 4) ? today : `${y}-12-31`, label: `em ${y}` };
+  if ((m = /\b(esse|este|neste|nesse|no)\s+ano\b/.exec(n))) return { start: `${curYear}-01-01`, end: today, label: `em ${curYear}` };
+  if ((m = /\b(?:em|de|do ano de|no ano de|ano de)\s+(20[1-3]\d)\b/.exec(n)) || (m = /(?<!r\$\s?)\b(20[1-3]\d)\b/.exec(n))) {
+    const y = m[1];
+    return { start: `${y}-01-01`, end: y === String(curYear) ? today : `${y}-12-31`, label: `em ${y}` };
   }
   return { start: monthStart(cm), end: today, label: 'neste mês' };
 }
 
 function addDays(iso: string, n: number) { const d = fromISO(iso); d.setDate(d.getDate() + n); return toISO(d); }
 
-const STOP = new Set(['quanto', 'quantos', 'quanta', 'gastei', 'gasto', 'gastos', 'gastando', 'paguei', 'pago', 'com', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das', 'o', 'a', 'os', 'as', 'eu', 'ja', 'foi', 'esse', 'este', 'nesse', 'neste', 'mes', 'ano', 'passado', 'ultimos', 'ultimo', 'ultima', 'dias', 'meses', 'semana', 'hoje', 'ontem', 'total', 'ate', 'agora', 'me', 'diz', 'diga', 'fala', 'mostra', 'mostre', 'qual', 'quais', 'e', 'que', 'tenho', 'meu', 'minha', 'meus', 'minhas', 'por', 'pra', 'para', 'valor', 'soma', 'somando', 'durante', 'e', 'ou']);
+const STOP = new Set(['essa', 'esta', 'nessa', 'nesta', 'passada', 'proxima', 'proximo', 'ultima', 'anterior', 'quanto', 'quantos', 'quanta', 'gastei', 'gasto', 'gastos', 'gastando', 'paguei', 'pago', 'com', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das', 'o', 'a', 'os', 'as', 'eu', 'ja', 'foi', 'esse', 'este', 'nesse', 'neste', 'mes', 'ano', 'passado', 'ultimos', 'ultimo', 'ultima', 'dias', 'meses', 'semana', 'hoje', 'ontem', 'total', 'ate', 'agora', 'me', 'diz', 'diga', 'fala', 'mostra', 'mostre', 'qual', 'quais', 'e', 'que', 'tenho', 'meu', 'minha', 'meus', 'minhas', 'por', 'pra', 'para', 'valor', 'soma', 'somando', 'durante', 'e', 'ou']);
 
 export async function answerLocally(question: string): Promise<string> {
   const n = normalizeText(question).replace(/[?!.,;]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -63,16 +68,20 @@ export async function answerLocally(question: string): Promise<string> {
 
   if (/^(oi|ola|eai|e ai|bom dia|boa tarde|boa noite|ajuda|help|socorro)\b/.test(n) || /o que voce (faz|sabe|responde)|o que da pra perguntar|pode me ajudar/.test(n)) return HELP;
 
-  if (!hasMoneyIntent) {
+  // pergunta sobre o funcionamento vence a de números: "como funciona a fatura" não é "qual a fatura"
+  const asksHow = /\b(como funciona|como funcionam|o que e|o que sao|oque e|pra que serve|para que serve|como (eu )?(faco|uso|configuro|cadastro|importo|registro|lanco|crio|defino|ativo|instalo|troco|mudo))\b/.test(n);
+  if (asksHow || !hasMoneyIntent) {
     const faq = answerFaq(n);
     if (faq) return faq;
   }
 
   // ---- viagens ----
-  if (/viagem|viagens|viajar|viajando/.test(n)) {
-    const trips = await listTrips();
+  const tripsForIntent = /viagem|viagens|viajar|viajando/.test(n) ? await listTrips() : [];
+  const namedTrip = tripsForIntent.find((t) => new RegExp(`\\b${normalizeText(t.name)}\\b`).test(n)) ?? null;
+  if (/viagem|viagens|viajar|viajando/.test(n) && (namedTrip || !/\b(quanto|gastei|gasto|gastos|paguei)\b/.test(n))) {
+    const trips = tripsForIntent;
     if (!trips.length) return 'Nenhuma viagem cadastrada. Em Viagens, crie uma com nome, ida, volta e teto de gastos. O que você lançar nas datas dela (fora as categorias fixas) entra no teto automaticamente.';
-    const named = trips.find((t) => new RegExp(`\\b${normalizeText(t.name)}\\b`).test(n));
+    const named = namedTrip;
     const today = todayISO();
     const pick = named ?? trips.find((t) => t.start_date <= today && t.end_date >= today) ?? trips.find((t) => t.start_date > today) ?? trips[0];
     const s = await tripStatus(pick);
@@ -87,7 +96,7 @@ export async function answerLocally(question: string): Promise<string> {
 
   // ---- orçamento por percentual ----
   if (/orcamento|\bmeta\b|metas|percentual|limite|estourei|estourou|passei do|dentro do/.test(n)) {
-    const month = monthFromText(n) ?? currentMonth();
+    const month = monthFromText(n, true) ?? currentMonth();
     const b = await getBudgetStatus(month);
     if (!b.groups.length) return 'Você ainda não configurou grupos de orçamento. Em Configurações > Orçamento por percentual, crie os grupos (ex.: Necessidades 40%, Lazer 15%, Educação 15%, Investimentos 30%) e ligue cada categoria a um grupo.';
     if (!b.base) return 'Os grupos existem, mas não tenho uma base de renda pra calcular os limites: defina a renda mensal em Configurações ou registre uma receita neste mês.';
@@ -99,11 +108,10 @@ export async function answerLocally(question: string): Promise<string> {
     const cards = (await listAccounts()).filter((a) => a.kind === 'credit_card' && a.closing_day && a.due_day);
     if (!cards.length) return 'Você ainda não cadastrou nenhum cartão de crédito. Vá em Configurações, crie o cartão com dia de fechamento e vencimento, e as faturas aparecem sozinhas.';
     const summaries = await invoiceSummaries();
-    const today = new Date();
     const lines: string[] = [];
     for (const c of cards) {
-      const open = today.getDate() > c.closing_day! ? addMonths(currentMonth(), 1) : currentMonth();
-      const wanted = /\b(proxima|seguinte)\b/.test(n) ? addMonths(open, 1) : /mes passado|anterior|ultima fatura/.test(n) ? addMonths(open, -1) : monthFromText(n) ?? open;
+      const open = openInvoiceMonth(c.closing_day!);
+      const wanted = /\b(proxima|seguinte)\b/.test(n) ? addMonths(open, 1) : /mes passado|anterior|ultima fatura/.test(n) ? addMonths(open, -1) : monthFromText(n, true) ?? open;
       const { closes, due } = invoiceDates(wanted, c.closing_day!, c.due_day!);
       const s = summaries.find((x) => x.account_id === c.id && x.invoice_month === wanted);
       const status = wanted === open ? 'aberta' : wanted < open ? 'fechada' : 'futura';
@@ -207,8 +215,8 @@ export async function answerLocally(question: string): Promise<string> {
   return `Não entendi essa pergunta. ${HELP}`;
 }
 
-function monthFromText(n: string): string | null {
-  const p = parsePeriod(n);
+function monthFromText(n: string, preferFuture = false): string | null {
+  const p = parsePeriod(n, { preferFuture });
   return p.label === 'neste mês' || p.label === 'hoje' || p.label === 'ontem' || p.label.startsWith('últimos') || p.label.startsWith('em ') ? null : p.start.slice(0, 7);
 }
 

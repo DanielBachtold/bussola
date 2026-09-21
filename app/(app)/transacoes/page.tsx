@@ -5,16 +5,20 @@ import type { TxKind } from '@/lib/types';
 import { MonthNav } from '@/components/MonthNav';
 import { TxList } from '@/components/TxList';
 import { Filters } from './Filters';
+import { intParam, monthParam } from '@/lib/params';
 import { listTrips } from '@/lib/trips';
 
 export const metadata = { title: 'Extrato' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function TransacoesPage({ searchParams }: PageProps<'/transacoes'>) {
+  await requireSession();
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '');
-  const month = /^\d{4}-\d{2}$/.test(str('m')) ? str('m') : currentMonth();
-  const accountId = Number(str('a')) || undefined;
-  const categoryId = Number(str('c')) || undefined;
+  const month = monthParam(str('m')) ?? currentMonth();
+  const accountId = intParam(str('a'));
+  const categoryId = intParam(str('c'));
   const kind = (['expense', 'income', 'transfer'].includes(str('k')) ? str('k') : undefined) as TxKind | undefined;
   const search = str('q') || undefined;
 
@@ -35,7 +39,7 @@ export default async function TransacoesPage({ searchParams }: PageProps<'/trans
         </div>
         <MonthNav month={month} basePath="/transacoes" extra={extra} />
       </header>
-      <Filters accounts={accounts} categories={categories} month={month} values={{ a: accountId, c: categoryId, k: kind, q: search }} />
+      <Filters key={`${accountId ?? ''}|${categoryId ?? ''}|${kind ?? ''}|${search ?? ''}`} accounts={accounts} categories={categories} month={month} values={{ a: accountId, c: categoryId, k: kind, q: search }} />
       <section className="card px-4 py-2">
         <TxList items={items} categories={categories} trips={trips} />
       </section>

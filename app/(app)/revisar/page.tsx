@@ -6,7 +6,10 @@ import { listTrips } from '@/lib/trips';
 
 export const metadata = { title: 'Revisar' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function RevisarPage() {
+  await requireSession();
   const [{ unreviewed, unmatched }, categories, trips] = await Promise.all([pendingReview(), listCategories(), listTrips()]);
   const total = unreviewed.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
 

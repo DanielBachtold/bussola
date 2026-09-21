@@ -11,7 +11,7 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) { console.error('DATABASE_URL não definida.'); process.exit(1); }
 const pool = new Pool({ connectionString, ssl: /localhost|127\.0\.0\.1/.test(connectionString) ? false : { rejectUnauthorized: false } });
 
-function iso(d: Date) { return d.toISOString().slice(0, 10); }
+function iso(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function rand(min: number, max: number) { return Math.round((min + Math.random() * (max - min)) * 100) / 100; }
 
 async function main() {

@@ -9,7 +9,10 @@ import { listTrips } from '@/lib/trips';
 
 export const metadata = { title: 'Lançar' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function LancarPage() {
+  await requireSession();
   const [accounts, categories, rules, recent, trips] = await Promise.all([
     listAccounts(), listCategories(), listRules(pool), listTransactions({ month: currentMonth(), status: 'pending', limit: 20 }), listTrips(),
   ]);

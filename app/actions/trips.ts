@@ -35,6 +35,8 @@ export async function saveTrip(_prev: ActionState | undefined, formData: FormDat
 
 export async function deleteTrip(id: number): Promise<ActionState> {
   await requireSession();
+  // o vínculo some (ON DELETE SET NULL); o "fora do teto" não pode sobreviver sem viagem
+  await pool.query(`UPDATE transactions SET trip_excluded = FALSE WHERE trip_id = $1`, [id]);
   await pool.query(`DELETE FROM trips WHERE id = $1`, [id]);
   revalidate();
   return { ok: true };

@@ -31,7 +31,7 @@ export function AccountsPanel({ accounts }: { accounts: Account[] }) {
         ))}
         {!accounts.length ? <li className="py-3 text-ink-3 text-sm">Nenhuma conta. Crie sua conta corrente, seus cartões e suas corretoras.</li> : null}
       </ul>
-      {editing ? <AccountForm account={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
+      {editing ? <AccountForm key={editing === 'new' ? 'new' : editing.id} account={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
     </section>
   );
 }
@@ -104,7 +104,7 @@ export function CategoriesPanel({ categories }: { categories: Category[] }) {
           </ul>
         </div>
       ))}
-      {editing ? <CategoryForm category={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
+      {editing ? <CategoryForm key={editing === 'new' ? 'new' : editing.id} category={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
     </section>
   );
 }

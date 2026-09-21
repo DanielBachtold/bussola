@@ -6,13 +6,17 @@ import { formatDate, todayISO } from '@/lib/dates';
 import { TripCard } from '@/components/TripCard';
 import { TxList } from '@/components/TxList';
 import { PrepaidForm, TripForm, TripActions } from './TripForms';
+import { intParam } from '@/lib/params';
 
 export const metadata = { title: 'Viagens' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function ViagensPage({ searchParams }: PageProps<'/viagens'>) {
+  await requireSession();
   const sp = await searchParams;
   const [trips, accounts, categories] = await Promise.all([listTrips(), listAccounts(), listCategories()]);
-  const selectedId = Number(sp.v) || trips.find((t) => t.start_date <= todayISO() && t.end_date >= todayISO())?.id || trips[0]?.id;
+  const selectedId = intParam(sp.v) ?? (trips.find((t) => t.start_date <= todayISO() && t.end_date >= todayISO())?.id || trips[0]?.id);
   const selected = trips.find((t) => t.id === selectedId) ?? null;
   const status = selected ? await tripStatus(selected) : null;
   const creating = sp.nova === '1' || !trips.length;
@@ -50,7 +54,7 @@ export default async function ViagensPage({ searchParams }: PageProps<'/viagens'
           <section className="card p-4 flex flex-col gap-3">
             <TripCard s={status} />
             {selected.notes ? <p className="text-[13px] text-ink-2 whitespace-pre-wrap">{selected.notes}</p> : null}
-            <TripActions trip={selected} />
+            <TripActions key={selected.id} trip={selected} />
           </section>
 
           <section className="grid lg:grid-cols-5 gap-4">
@@ -65,7 +69,7 @@ export default async function ViagensPage({ searchParams }: PageProps<'/viagens'
                 <TxList items={status.prepaidItems} categories={categories} trips={trips} compact emptyText="Nenhum item pré-pago." />
                 <details className="mt-1">
                   <summary className="cursor-pointer text-[13px] text-accent">Registrar item pré-pago</summary>
-                  <div className="mt-2"><PrepaidForm tripId={selected.id} accounts={accounts} categories={categories} /></div>
+                  <div className="mt-2"><PrepaidForm key={selected.id} tripId={selected.id} accounts={accounts} categories={categories} /></div>
                 </details>
               </div>
             </div>

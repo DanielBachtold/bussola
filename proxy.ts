@@ -1,23 +1,43 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { unsealData } from 'iron-session';
 
 const SESSION_COOKIE = 'bussola_session';
+const SESSION_TTL = 60 * 60 * 24 * 30;
 
-// Só checa a presença do cookie (rápido). A validação de verdade acontece em
-// requireSession()/sessionOrNull() dentro de cada página e rota.
-export function proxy(request: NextRequest) {
+/**
+ * Valida o selo da sessão em toda requisição de página. Cookie ausente,
+ * inválido ou vencido: vai pro login (e o cookie ruim é apagado, senão
+ * login e app ficariam se redirecionando um pro outro). Cada página ainda
+ * chama requireSession(), porque numa navegação suave o layout não roda.
+ */
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasCookie = request.cookies.has(SESSION_COOKIE);
+  const seal = request.cookies.get(SESSION_COOKIE)?.value;
+  const loggedIn = seal ? await isValidSeal(seal) : false;
 
   if (pathname === '/login') {
-    return hasCookie ? NextResponse.redirect(new URL('/', request.url)) : NextResponse.next();
+    return loggedIn ? NextResponse.redirect(new URL('/', request.url)) : NextResponse.next();
   }
-  if (!hasCookie) {
-    const url = new URL('/login', request.url);
-    return NextResponse.redirect(url);
+  if (!loggedIn) {
+    const res = NextResponse.redirect(new URL('/login', request.url));
+    if (seal) res.cookies.delete(SESSION_COOKIE);
+    return res;
   }
   return NextResponse.next();
 }
 
+async function isValidSeal(seal: string): Promise<boolean> {
+  const password = process.env.SESSION_SECRET;
+  if (!password || password.length < 32) return false;
+  try {
+    const data = await unsealData<{ loggedIn?: boolean }>(seal, { password, ttl: SESSION_TTL });
+    return data?.loggedIn === true;
+  } catch {
+    return false;
+  }
+}
+
 export const config = {
-  matcher: ['/((?!api/auth|_next/static|_next/image|manifest.webmanifest|icon.*|.*\\.png$|.*\\.svg$).*)'],
+  // tudo, menos rotas de API e arquivos estáticos (qualquer caminho com extensão: .js, .png, .webmanifest...)
+  matcher: ['/((?!api/|_next/|.*\\.[a-zA-Z0-9]+$).*)'],
 };

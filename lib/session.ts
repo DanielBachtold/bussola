@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 export type SessionData = { loggedIn?: boolean };
 
 export const SESSION_COOKIE = 'bussola_session';
+/** 30 dias, tanto pro cookie quanto pro selo: se divergirem, o cookie sobrevive ao selo e o login entra em loop. */
+export const SESSION_TTL = 60 * 60 * 24 * 30;
 
 function sessionOptions(): SessionOptions {
   const password = process.env.SESSION_SECRET;
@@ -14,11 +16,12 @@ function sessionOptions(): SessionOptions {
   return {
     password,
     cookieName: SESSION_COOKIE,
+    ttl: SESSION_TTL,
     cookieOptions: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: SESSION_TTL,
     },
   };
 }

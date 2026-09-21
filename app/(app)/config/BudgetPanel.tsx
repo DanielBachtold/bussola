@@ -54,7 +54,7 @@ export function BudgetPanel({ status, groups, categories, monthlyIncome, thresho
         })}
         {!groups.length ? <li className="py-2 text-ink-3 text-[13px]">Nenhum grupo. Crie, por exemplo: Necessidades 40%, Lazer 15%, Educação 15%, Investimentos 30%.</li> : null}
       </ul>
-      {editing ? <GroupForm group={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
+      {editing ? <GroupForm key={editing === 'new' ? 'new' : editing.id} group={editing === 'new' ? null : editing} close={() => setEditing(null)} /> : null}
 
       <div>
         <p className="text-[12px] uppercase tracking-wide text-ink-3 font-medium mb-1">Categoria → grupo</p>

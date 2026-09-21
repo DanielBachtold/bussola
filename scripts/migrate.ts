@@ -138,6 +138,15 @@ const statements = [
   `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS trip_excluded BOOLEAN NOT NULL DEFAULT FALSE`,
   `CREATE INDEX IF NOT EXISTS transactions_trip ON transactions(trip_id)`,
   `ALTER TABLE categories ADD COLUMN IF NOT EXISTS fixed BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE TABLE IF NOT EXISTS login_attempts (
+    ip TEXT PRIMARY KEY,
+    fails INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  // padrão repetido criaria regras conflitantes; remove duplicatas antes de travar
+  `DELETE FROM category_rules a USING category_rules b WHERE a.pattern = b.pattern AND a.id > b.id`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS category_rules_pattern ON category_rules(pattern)`,
   `CREATE TABLE IF NOT EXISTS insights (
     id SERIAL PRIMARY KEY,
     month DATE NOT NULL UNIQUE,

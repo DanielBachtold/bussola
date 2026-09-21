@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { addMonths, currentMonth, invoiceDates, monthEnd, monthStart, todayISO } from '@/lib/dates';
+import { currentMonth, invoiceDates, monthEnd, monthStart, openInvoiceMonth, todayISO } from '@/lib/dates';
 import { computeInsights } from '@/lib/insights';
 import { getBudgetStatus } from '@/lib/budget';
 import { listTrips, tripStatus } from '@/lib/trips';
@@ -146,10 +146,9 @@ export async function runTool(name: string, rawInput: unknown): Promise<{ ok: tr
         const { cartao } = FaturasSchema.parse(rawInput ?? {});
         const cards = (await listAccounts()).filter((a) => a.kind === 'credit_card' && (!cartao || a.name.toLowerCase().includes(cartao.toLowerCase())));
         const [summaries, commitments] = await Promise.all([invoiceSummaries(), futureCommitments()]);
-        const today = new Date();
         return { ok: true, result: {
           cartoes: cards.map((c) => {
-            const open = today.getDate() > (c.closing_day ?? 31) ? addMonths(currentMonth(), 1) : currentMonth();
+            const open = openInvoiceMonth(c.closing_day ?? 31);
             const { closes, due } = invoiceDates(open, c.closing_day!, c.due_day!);
             return {
               cartao: c.name, fechamento_dia: c.closing_day, vencimento_dia: c.due_day, limite: c.credit_limit,

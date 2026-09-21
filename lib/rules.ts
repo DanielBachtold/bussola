@@ -21,19 +21,34 @@ export async function listRules(db: Queryable): Promise<Rule[]> {
 export function applyRules(description: string, rules: Rule[]): { category_id: number | null; kind: TxKind | null } {
   const text = normalizeText(description);
   for (const r of rules) {
-    if (text.includes(normalizeText(r.pattern))) {
-      return { category_id: r.category_id, kind: r.kind };
-    }
+    const pattern = normalizeText(r.pattern);
+    if (!pattern) continue;
+    // fronteira de palavra: "uber" não pode casar dentro de "tuberculose"
+    const re = new RegExp(`(^|[^a-z0-9])${escapeRegex(pattern)}([^a-z0-9]|$)`);
+    if (re.test(text)) return { category_id: r.category_id, kind: r.kind };
   }
   return { category_id: null, kind: null };
 }
+
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Palavras que aparecem em qualquer linha de extrato e não identificam ninguém.
+// Uma regra feita só delas categorizaria tudo (ex.: todo Pix viraria "Alimentação").
+const GENERIC = new Set([
+  'pix', 'ted', 'doc', 'transferencia', 'transf', 'enviado', 'enviada', 'recebido', 'recebida', 'pagamento', 'pgto', 'pag',
+  'compra', 'cartao', 'debito', 'credito', 'parcela', 'parc', 'boleto', 'saque', 'deposito', 'tarifa', 'lancamento',
+  'nubank', 'nu', 'rico', 'xp', 'btg', 'itau', 'bradesco', 'santander', 'inter', 'c6', 'caixa', 'bb', 'sicredi', 'sicoob',
+  'ltda', 'me', 'sa', 'eireli', 'mei', 'com', 'de', 'do', 'da', 'no', 'na', 'em', 'e', 'a', 'o', 'x',
+]);
 
 /**
  * Quando o Daniel categoriza uma linha importada, o sistema aprende: extrai
  * um padrão do texto do extrato (sem números, datas e ruído) e salva a regra.
  */
 export function patternFromDescription(description: string): string | null {
-  let p = normalizeText(description)
+  const p = normalizeText(description)
     .replace(/\d{2}\/\d{2}(\/\d{2,4})?/g, ' ')
     .replace(/\b\d+[.,]?\d*\b/g, ' ')
     .replace(/[*#|:_\-]+/g, ' ')
@@ -41,9 +56,11 @@ export function patternFromDescription(description: string): string | null {
     .replace(/\s+/g, ' ')
     .trim();
   if (p.length < 3) return null;
+  const words = p.split(' ').filter((w) => w && !GENERIC.has(w));
+  // precisa sobrar pelo menos uma palavra que identifique o estabelecimento
+  if (!words.some((w) => w.length >= 3)) return null;
   // limita a 3 palavras: suficiente pra identificar o estabelecimento
-  p = p.split(' ').slice(0, 3).join(' ');
-  return p;
+  return words.slice(0, 3).join(' ');
 }
 
 export async function upsertRule(db: Queryable, pattern: string, categoryId: number | null, kind: TxKind | null) {

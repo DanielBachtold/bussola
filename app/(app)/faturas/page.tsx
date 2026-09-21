@@ -1,13 +1,17 @@
 import Link from 'next/link';
-import { addMonths, currentMonth, formatDate, formatMonth, invoiceDates } from '@/lib/dates';
+import { addMonths, formatDate, formatMonth, invoiceDates, openInvoiceMonth } from '@/lib/dates';
 import { formatBRL } from '@/lib/money';
 import { futureCommitments, invoiceSummaries, listAccounts, listCategories, listTransactions } from '@/lib/queries';
 import { TxList } from '@/components/TxList';
+import { intParam, monthParam } from '@/lib/params';
 import { ScrollStrip } from '@/components/ScrollIntoView';
 
 export const metadata = { title: 'Faturas' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function FaturasPage({ searchParams }: PageProps<'/faturas'>) {
+  await requireSession();
   const sp = await searchParams;
   const accounts = (await listAccounts()).filter((a) => a.kind === 'credit_card');
   const categories = await listCategories();
@@ -20,11 +24,10 @@ export default async function FaturasPage({ searchParams }: PageProps<'/faturas'
       </div>
     );
   }
-  const cardId = Number(sp.cartao) || accounts[0].id;
+  const cardId = intParam(sp.cartao) ?? accounts[0].id;
   const card = accounts.find((a) => a.id === cardId) ?? accounts[0];
-  const today = new Date();
-  const openMonth = today.getDate() > (card.closing_day ?? 31) ? addMonths(currentMonth(), 1) : currentMonth();
-  const month = typeof sp.m === 'string' && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : openMonth;
+  const openMonth = openInvoiceMonth(card.closing_day ?? 31);
+  const month = monthParam(sp.m) ?? openMonth;
 
   const [summaries, items, commitments] = await Promise.all([
     invoiceSummaries(card.id), listTransactions({ accountId: card.id, invoiceMonth: month, limit: 1000 }), futureCommitments(),

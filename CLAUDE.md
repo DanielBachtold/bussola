@@ -11,6 +11,10 @@
 - Chat: `lib/chat/local.ts` responde sem IA (modo padrão); `lib/chat/tools.ts` + `app/api/chat` usam o Claude só com `ANTHROPIC_API_KEY`. O resto do sistema não pode depender de IA.
 - Orçamento (`lib/budget.ts`): limite do grupo = % × base (renda configurada > receita do mês > média 3m). Gasto ligado a viagem (e não pré-pago) fica FORA dos grupos.
 - Viagens (`lib/trips.ts`): `createTransaction` liga o gasto à viagem ativa na data, exceto categoria `fixed`; `tripId: null` explícito impede. `trip_excluded` = pré-pago, fora do teto.
+- Auth: `proxy.ts` valida o selo do cookie (iron-session, ttl = maxAge = 30 dias) e TODA página em `app/(app)` chama `requireSession()` (numa navegação suave o layout não roda). Login tem freio por IP em `login_attempts`.
+- "Hoje" é sempre `todayISO()`/`todayDay()` de `lib/dates.ts` (fuso America/Sao_Paulo); nunca `new Date().getDate()` no servidor (Vercel é UTC).
+- Parcelas: a fatura é a da 1ª parcela + i meses (`createTransaction`), não recalculada da data clampada.
+- Importação: linha sem FITID ganha id sintético `h:<sha1>` (reimportar CSV não duplica); FITID repetido no arquivo vira "duplicate".
 - Tema: `public/theme-boot.js` (beforeInteractive) + `data-theme` no `<html>`; tokens escuros duplicados em `globals.css` (media query e data-theme).
 - Copy em português, primeira pessoa quando fizer sentido, sem travessão.
 - Dev local sem Postgres: `npm run db:local` (PGlite na porta 5433) + `.env.local` apontando pra ele.

@@ -11,7 +11,10 @@ export const metadata = { title: 'Investimentos' };
 
 const SERIES = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)', 'var(--s7)', 'var(--s8)'];
 
+import { requireSession } from '@/lib/session';
+
 export default async function InvestimentosPage() {
+  await requireSession();
   const accounts = (await listAccounts()).filter((a) => a.kind === 'investment');
   const [snapshots, series, allocation] = await Promise.all([listSnapshots(), netWorthSeries(), latestAllocation()]);
   const total = allocation.reduce((a, s) => a + s.balance, 0);

@@ -8,12 +8,14 @@ import type { Account } from '@/lib/types';
 
 export function ImportForm({ accounts }: { accounts: Account[] }) {
   const [state, action, pending] = useActionState(previewUpload, undefined);
-  const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number } | null>(null);
+  // o resultado só vale pra prévia que o gerou: uma nova prévia volta a mostrar a tabela
+  const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number; forPreview: unknown } | null>(null);
   const [committing, start] = useTransition();
   const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
-  const account = accounts.find((a) => String(a.id) === accountId);
 
   const s: PreviewState | undefined = state;
+  const shownResult = result && s?.preview && result.forPreview === s.preview ? result : null;
+  const previewAccount = s?.preview ? accounts.find((a) => a.id === s.preview!.accountId) : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,18 +41,18 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
 
       {s?.error ? <p className="text-sm text-bad">{s.error}</p> : null}
 
-      {result ? (
+      {shownResult ? (
         <div className="card p-4 border-l-4 border-l-good">
           <p className="font-semibold">Importação concluída</p>
-          <p className="text-[13px] text-ink-2">{result.matched} lançamentos conciliados com o que você já tinha registrado, {result.inserted} novos (veja em Revisar), {result.skipped} já existiam.</p>
+          <p className="text-[13px] text-ink-2">{shownResult.matched} lançamentos conciliados com o que você já tinha registrado, {shownResult.inserted} novos (veja em Revisar), {shownResult.skipped} já existiam.</p>
         </div>
       ) : null}
 
-      {s?.preview && !result ? (
+      {s?.preview && !shownResult ? (
         <div className="card p-4 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="font-semibold">{s.filename} · {account?.name}</p>
+              <p className="font-semibold">{s.filename} · {previewAccount?.name}</p>
               <p className="text-[13px] text-ink-2">
                 {s.statement?.periodStart ? `${formatDate(s.statement.periodStart)} a ${formatDate(s.statement.periodEnd ?? s.statement.periodStart)} · ` : ''}
                 {s.preview.lines.length} linhas
@@ -63,8 +65,8 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
               <span className="pill">{s.preview.counts.duplicate} repetidas</span>
             </div>
           </div>
-          {s.statement?.accountKind !== 'unknown' && account && s.statement?.accountKind !== account.kind && account.kind !== 'investment' ? (
-            <p className="text-[13px] text-warn">O arquivo parece ser de {s.statement?.accountKind === 'credit_card' ? 'cartão de crédito' : 'conta corrente'}, mas a conta escolhida é {account.kind === 'credit_card' ? 'cartão' : 'conta corrente'}. Confira antes de confirmar.</p>
+          {s.statement?.accountKind !== 'unknown' && previewAccount && s.statement?.accountKind !== previewAccount.kind && previewAccount.kind !== 'investment' ? (
+            <p className="text-[13px] text-warn">O arquivo parece ser de {s.statement?.accountKind === 'credit_card' ? 'cartão de crédito' : 'conta corrente'}, mas a conta escolhida é {previewAccount.kind === 'credit_card' ? 'cartão' : 'conta corrente'}. Confira antes de confirmar.</p>
           ) : null}
           <div className="max-h-[420px] overflow-auto -mx-4 px-4">
             <table className="w-full text-[13px]">
@@ -92,7 +94,7 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
             disabled={committing || (s.preview.counts.match + s.preview.counts.new === 0)}
             onClick={() => start(async () => {
               const r = await confirmImport(s.preview!.accountId, s.filename!, s.statement!, Boolean(s.invertSigns));
-              setResult(r);
+              setResult({ ...r, forPreview: s.preview });
             })}
           >
             {committing ? 'Importando...' : `Confirmar importação (${s.preview.counts.match + s.preview.counts.new})`}

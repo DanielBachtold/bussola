@@ -26,7 +26,10 @@ export function parseAmount(input: string | number): number {
     // 1.234,56 (BR) ou 1,234.56 (US): o último separador é o decimal
     s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
   } else if (s.includes(',')) {
-    s = s.replace(',', '.');
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    // "1.500" e "12.000" são milhar em português, não decimal
+    s = s.replace(/\./g, '');
   }
   const n = Number(s);
   if (!Number.isFinite(n)) throw new Error(`Valor inválido: ${input}`);

@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { pool, withTransaction } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { parseAmount } from '@/lib/money';
-import { quickParse } from '@/lib/quickparse';
+import { quickParse, signedAmount } from '@/lib/quickparse';
+import { isValidISO } from '@/lib/dates';
 import { listRules, patternFromDescription, upsertRule } from '@/lib/rules';
 import {
   createTransaction, deleteInstallmentGroup, deleteTransaction, getTransaction, listAccounts, listCategories, updateTransaction,
@@ -18,19 +19,24 @@ function revalidateAll() {
 export type ActionState = { ok?: boolean; error?: string; message?: string };
 
 /** Lançamento pela barra rápida: a frase já foi interpretada no cliente e confirmada. */
-export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null; tripId?: number | null }): Promise<ActionState> {
+export async function quickAdd(text: string, overrides: { accountId?: number; categoryId?: number | null; tripId?: number | null; date?: string }): Promise<ActionState> {
   await requireSession();
   const [accounts, categories, rules] = await Promise.all([listAccounts(), listCategories(), listRules(pool)]);
   const parsed = quickParse(text, accounts, categories, rules);
   if (!parsed) return { error: 'Não encontrei um valor na frase.' };
   const accountId = overrides.accountId ?? parsed.account?.id;
-  if (!accountId) return { error: 'Escolha a conta.' };
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) return { error: 'Escolha a conta.' };
   const categoryId = overrides.categoryId !== undefined ? overrides.categoryId : parsed.category?.id ?? null;
+  // a data mostrada na prévia (calculada no navegador) vale mais que a recalculada aqui
+  const date = overrides.date && isValidISO(overrides.date) ? overrides.date : parsed.date;
+  // o sinal depende da conta que vai receber o lançamento, que pode ter sido trocada na prévia
+  const amount = signedAmount(Math.abs(parsed.amount), parsed.kind, parsed.direction, account);
 
   const created = await createTransaction({
-    accountId,
-    date: parsed.date,
-    amount: parsed.amount,
+    accountId: account.id,
+    date,
+    amount,
     description: parsed.description,
     categoryId,
     kind: parsed.kind,
@@ -38,20 +44,19 @@ export async function quickAdd(text: string, overrides: { accountId?: number; ca
     installments: parsed.installments,
     tripId: overrides.tripId,
   });
-  // aporte em investimento: registra também a saída da conta corrente, se houver só uma
-  const target = accounts.find((a) => a.id === accountId);
+  // aporte/resgate em investimento: registra também o outro lado na conta corrente, se houver só uma
   const checking = accounts.filter((a) => a.kind === 'checking');
   let mirror = '';
-  if (parsed.kind === 'transfer' && target?.kind === 'investment' && parsed.amount > 0 && checking.length === 1) {
+  if (parsed.kind === 'transfer' && account.kind === 'investment' && checking.length === 1) {
     await createTransaction({
       accountId: checking[0].id,
-      date: parsed.date,
-      amount: -parsed.amount,
-      description: `Aporte ${target.name}`,
+      date,
+      amount: -amount,
+      description: `${parsed.direction === 'out' ? 'Resgate' : 'Aporte'} ${account.name}`,
       kind: 'transfer',
       source: 'manual',
     });
-    mirror = ` e a saída de ${checking[0].name}`;
+    mirror = ` e ${parsed.direction === 'out' ? 'a entrada em' : 'a saída de'} ${checking[0].name}`;
   }
   revalidateAll();
   const first = created[0];
@@ -114,8 +119,10 @@ export async function setKind(id: number, kind: TxKind, learn: boolean): Promise
   await requireSession();
   const tx = await getTransaction(id);
   if (!tx) return { error: 'Lançamento não encontrado.' };
+  // trocar o tipo corrige o sinal: gasto sempre sai, receita sempre entra; transferência mantém
+  const amount = kind === 'expense' ? -Math.abs(tx.amount) : kind === 'income' ? Math.abs(tx.amount) : tx.amount;
   await withTransaction(async (db) => {
-    await updateTransaction(id, { kind, reviewed: true, categoryId: kind === 'transfer' ? null : tx.category_id }, db);
+    await updateTransaction(id, { kind, amount, reviewed: true, categoryId: kind === 'transfer' ? null : tx.category_id }, db);
     if (learn && kind === 'transfer') {
       const pattern = patternFromDescription(tx.statement_description ?? tx.description);
       if (pattern) await upsertRule(db, pattern, null, 'transfer');

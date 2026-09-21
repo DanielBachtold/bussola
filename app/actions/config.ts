@@ -88,9 +88,13 @@ export async function saveRule(_prev: ActionState | undefined, formData: FormDat
   const kind = target === 'transfer' ? 'transfer' : null;
   const categoryId = target && target !== 'transfer' ? Number(target) : null;
   if (!kind && !categoryId) return { error: 'Escolha a categoria ou "Transferência".' };
-  await pool.query(`INSERT INTO category_rules (pattern, category_id, kind) VALUES ($1,$2,$3)`, [pattern, categoryId, kind]);
+  await pool.query(
+    `INSERT INTO category_rules (pattern, category_id, kind) VALUES ($1,$2,$3)
+     ON CONFLICT (pattern) DO UPDATE SET category_id = EXCLUDED.category_id, kind = EXCLUDED.kind`,
+    [pattern, categoryId, kind],
+  );
   revalidate();
-  return { ok: true, message: 'Regra criada.' };
+  return { ok: true, message: 'Regra salva.' };
 }
 
 export async function deleteRule(id: number): Promise<ActionState> {

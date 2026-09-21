@@ -1,13 +1,15 @@
-import { todayISO, toISO, fromISO } from './dates';
+import { todayISO, toISO, fromISO, isValidISO } from './dates';
 import { parseAmount } from './money';
 import { applyRules, normalizeText } from './rules';
 import type { Account, Category, Rule, TxKind } from './types';
 
 export type QuickParse = {
-  amount: number; // já com sinal
+  amount: number; // já com sinal na conta escolhida
   description: string;
   date: string;
   kind: TxKind;
+  /** para transferência: 'in' = entra na conta de investimento (aporte), 'out' = sai dela (resgate) */
+  direction: 'in' | 'out';
   installments: number;
   account: Account | null;
   category: Category | null;
@@ -18,17 +20,13 @@ export type QuickParse = {
  * Entende frases do dia a dia sem IA:
  *   "almoço 42 crédito rico"       "uber 23,50"          "mercado 350 em 3x rico"
  *   "recebi 5000 salário nubank"   "aporte 2000 rico"    "ontem farmácia 89 débito"
+ * Ordem importa: parcelas e datas saem da frase ANTES de procurar o valor, senão
+ * "dia 15 almoço 42" viraria R$ 15.
  */
 export function quickParse(input: string, accounts: Account[], categories: Category[], rules: Rule[]): QuickParse | null {
   const warnings: string[] = [];
   let text = ` ${input.trim()} `;
-
-  // valor: primeiro número da frase (aceita 42, 42,50, 1.234,56, R$ 42)
-  const amountMatch = /(?:r\$\s*)?(-?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|-?\d+(?:[.,]\d{1,2})?)(?=\s|$|x\b|reais)/i.exec(text.trim());
-  if (!amountMatch) return null;
-  let amount = Math.abs(parseAmount(amountMatch[1]));
-  if (!amount) return null;
-  text = text.replace(amountMatch[0], ' ').replace(/\breais?\b/i, ' ');
+  const today = todayISO();
 
   // parcelas: "em 3x", "3x", "3 vezes", "3 parcelas"
   let installments = 1;
@@ -36,42 +34,69 @@ export function quickParse(input: string, accounts: Account[], categories: Categ
   if (inst) { installments = Math.max(1, Number(inst[1])); text = text.replace(inst[0], ' '); }
 
   // data
-  let date = todayISO();
-  const norm = normalizeText(text);
-  if (/\bontem\b/.test(norm)) { date = addDays(date, -1); text = text.replace(/\bontem\b/i, ' '); }
-  else if (/\banteontem\b/.test(norm)) { date = addDays(date, -2); text = text.replace(/\banteontem\b/i, ' '); }
-  else if (/\bhoje\b/.test(norm)) { text = text.replace(/\bhoje\b/i, ' '); }
+  let date = today;
+  const norm0 = normalizeText(text);
+  if (/\bontem\b/.test(norm0)) { date = addDays(today, -1); text = text.replace(/\bontem\b/i, ' '); }
+  else if (/\banteontem\b/.test(norm0)) { date = addDays(today, -2); text = text.replace(/\banteontem\b/i, ' '); }
+  else if (/\bhoje\b/.test(norm0)) { text = text.replace(/\bhoje\b/i, ' '); }
   const explicit = /\b(?:dia\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(text);
   if (explicit) {
-    const y = explicit[3] ? (explicit[3].length === 2 ? `20${explicit[3]}` : explicit[3]) : date.slice(0, 4);
-    date = `${y}-${explicit[2].padStart(2, '0')}-${explicit[1].padStart(2, '0')}`;
+    const y = explicit[3] ? (explicit[3].length === 2 ? `20${explicit[3]}` : explicit[3]) : today.slice(0, 4);
+    const candidate = `${y}-${explicit[2].padStart(2, '0')}-${explicit[1].padStart(2, '0')}`;
+    if (isValidISO(candidate)) date = candidate;
+    else warnings.push(`Data "${explicit[0].trim()}" não existe; usei hoje.`);
     text = text.replace(explicit[0], ' ');
   } else {
     const dayOnly = /\bdia\s+(\d{1,2})\b/i.exec(text);
-    if (dayOnly) { date = `${date.slice(0, 7)}-${dayOnly[1].padStart(2, '0')}`; text = text.replace(dayOnly[0], ' '); }
-  }
-
-  // tipo
-  let kind: TxKind = 'expense';
-  if (/\b(recebi|recebimento|entrou|receita|ganhei|caiu)\b/.test(norm)) { kind = 'income'; text = text.replace(/\b(recebi|recebimento|entrou|receita|ganhei|caiu)\b/i, ' '); }
-  else if (/\b(aporte|apliquei|aplicacao|investi|transferi|transferencia|resgate|resgatei)\b/.test(norm)) { kind = 'transfer'; }
-
-  // conta: nome ou instituição citados (vence o mais específico); senão, pista de crédito/débito
-  let account: Account | null = null;
-  const active = accounts.filter((a) => !a.archived);
-  let bestMatch: { account: Account; term: string } | null = null;
-  for (const a of active) {
-    for (const term of [a.name, a.institution ?? ''].map(normalizeText).filter(Boolean)) {
-      const re = new RegExp(`\\b${escapeRe(term)}\\b`, 'i');
-      if (re.test(normalizeText(text)) && (!bestMatch || term.length > bestMatch.term.length)) bestMatch = { account: a, term };
+    if (dayOnly) {
+      const candidate = `${today.slice(0, 7)}-${dayOnly[1].padStart(2, '0')}`;
+      if (isValidISO(candidate)) date = candidate;
+      else warnings.push(`Dia ${dayOnly[1]} não existe neste mês; usei hoje.`);
+      text = text.replace(dayOnly[0], ' ');
     }
   }
-  if (bestMatch) {
-    account = bestMatch.account;
-    for (const w of bestMatch.term.split(' ')) text = replaceNormalized(text, w);
+
+  // valor: primeiro número solto da frase (aceita 42, 42,50, 1.234,56, 1.500, R$ 42)
+  const amountMatch = /(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?=\s|$|reais)/i.exec(text.trim());
+  if (!amountMatch) return null;
+  let amount: number;
+  try { amount = Math.abs(parseAmount(amountMatch[1])); } catch { return null; }
+  if (!amount) return null;
+  text = text.replace(amountMatch[0], ' ').replace(/\breais?\b/i, ' ');
+
+  // tipo e direção
+  const norm = normalizeText(text);
+  let kind: TxKind = 'expense';
+  let direction: 'in' | 'out' = 'in';
+  if (/\b(recebi|recebimento|entrou|receita|ganhei|caiu)\b/.test(norm)) { kind = 'income'; text = text.replace(/\b(recebi|recebimento|entrou|receita|ganhei|caiu)\b/i, ' '); }
+  else if (/\b(resgate|resgatei|saquei|retirei|saque)\b/.test(norm)) { kind = 'transfer'; direction = 'out'; }
+  else if (/\b(aporte|aportei|apliquei|aplicacao|investi|transferi|transferencia)\b/.test(norm)) { kind = 'transfer'; }
+  // receita sem verbo: "salário 5000", "estorno 50" (decidido antes da conta, que depende do tipo)
+  else if (/\b(salario|pro labore|prolabore|reembolso|estorno|rendimento|dividendo|cashback|comissao|freela)\b/.test(norm)) { kind = 'income'; }
+
+  // conta: nome ou instituição citados (vence o mais específico); a dica de crédito/débito
+  // desempata quando a mesma instituição tem conta e cartão
+  const wantsCredit = /\b(credito|cartao)\b/.test(norm);
+  const wantsDebit = /\b(debito|pix|conta)\b/.test(norm);
+  let account: Account | null = null;
+  const active = accounts.filter((a) => !a.archived);
+  let bestTerm = '';
+  const candidates: Account[] = [];
+  for (const a of active) {
+    for (const term of [a.name, a.institution ?? ''].map(normalizeText).filter(Boolean)) {
+      const re = new RegExp(`\\b${escapeRe(term)}\\b`);
+      if (!re.test(norm)) continue;
+      if (term.length > bestTerm.length) { bestTerm = term; candidates.length = 0; candidates.push(a); }
+      else if (term.length === bestTerm.length && !candidates.includes(a)) candidates.push(a);
+    }
   }
-  const wantsCredit = /\b(credito|cartao)\b/.test(normalizeText(text));
-  const wantsDebit = /\b(debito|pix|conta)\b/.test(normalizeText(text));
+  if (candidates.length) {
+    account = candidates.find((a) => wantsCredit && a.kind === 'credit_card')
+      ?? candidates.find((a) => wantsDebit && a.kind === 'checking')
+      ?? candidates.find((a) => kind === 'transfer' && a.kind === 'investment')
+      ?? candidates[0];
+    for (const w of bestTerm.split(' ')) text = replaceNormalized(text, w);
+  }
   text = text.replace(/\b(no|na|em)?\s*(cr[eé]dito|cart[aã]o|d[eé]bito|pix)\b/gi, ' ');
   if (!account) {
     const pick = (k: Account['kind']) => {
@@ -92,7 +117,7 @@ export function quickParse(input: string, accounts: Account[], categories: Categ
   // descrição: o que sobrou
   let description = text.replace(/\b(no|na|em|de|do|da|com)\s*$/i, '').replace(/\s+/g, ' ').trim();
   description = description.replace(/^(no|na|em|de|do|da)\s+/i, '').trim();
-  if (!description) description = kind === 'income' ? 'Receita' : kind === 'transfer' ? 'Aporte' : 'Gasto';
+  if (!description) description = kind === 'income' ? 'Receita' : kind === 'transfer' ? (direction === 'out' ? 'Resgate' : 'Aporte') : 'Gasto';
   description = description.charAt(0).toUpperCase() + description.slice(1);
 
   // categoria: regras do banco primeiro, depois palavras-chave comuns
@@ -105,10 +130,16 @@ export function quickParse(input: string, accounts: Account[], categories: Categ
     if (guess) category = categories.find((c) => normalizeText(c.name) === normalizeText(guess)) ?? null;
   }
 
-  if (kind === 'expense') amount = -amount;
-  if (kind === 'transfer' && account?.kind !== 'investment') amount = -amount;
+  return { amount: signedAmount(amount, kind, direction, account), description, date, kind, direction, installments, account, category, warnings };
+}
 
-  return { amount, description, date, kind, installments, account, category, warnings };
+/** Sinal do valor na conta em que vai ser gravado. */
+export function signedAmount(abs: number, kind: TxKind, direction: 'in' | 'out', account: Account | null): number {
+  if (kind === 'expense') return -abs;
+  if (kind === 'income') return abs;
+  // transferência: na conta de investimento, aporte entra e resgate sai; nas demais, o inverso
+  const intoInvestment = account?.kind === 'investment';
+  return (direction === 'in') === intoInvestment ? abs : -abs;
 }
 
 const KEYWORDS: Array<[RegExp, string]> = [
@@ -118,15 +149,15 @@ const KEYWORDS: Array<[RegExp, string]> = [
   [/\b(farmacia|remedio|medico|consulta|dentista|exame|academia|plano de saude|psicolog)/, 'Saúde'],
   [/\b(aluguel|condominio|luz|energia|agua|internet|gas|iptu|reforma)\b/, 'Moradia'],
   [/\b(netflix|spotify|youtube|prime|disney|hbo|assinatura|icloud|chatgpt|claude|adobe|figma|notion)\b/, 'Assinaturas'],
-  [/\b(cinema|show|ingresso|jogo|steam|playstation|bike|passeio|viagem)\b/, 'Lazer'],
+  [/\b(cinema|show|ingresso|jogo|steam|playstation|bike|passeio)\b/, 'Lazer'],
   [/\b(roupa|tenis|sapato|camisa|calca|amazon|shopee|mercado livre|magalu|loja)\b/, 'Compras'],
   [/\b(curso|livro|faculdade|escola|udemy|alura)\b/, 'Educação'],
-  [/\b(hotel|airbnb|voo|passagem aerea|latam|gol|azul)\b/, 'Viagem'],
-  [/\b(imposto|taxa|darf|das|inss|multa|iof|tarifa)\b/, 'Impostos e taxas'],
+  [/\b(hotel|airbnb|voo|passagem aerea|latam|gol|azul|viagem)\b/, 'Viagem'],
+  [/\b(imposto|taxa|darf|simples nacional|inss|multa|iof|tarifa)\b/, 'Impostos e taxas'],
   [/\b(barbearia|cabelo|barbeiro|salao|presente)\b/, 'Pessoal'],
-  [/\b(salario|pro labore|prolabore|pagamento cliente)\b/, 'Salário'],
+  [/\b(salario|pro labore|prolabore|pagamento cliente|comissao|freela)\b/, 'Salário'],
   [/\b(rendimento|dividendo|juros|cdb|tesouro)\b/, 'Rendimentos'],
-  [/\b(reembolso|estorno)\b/, 'Reembolso'],
+  [/\b(reembolso|estorno|cashback)\b/, 'Reembolso'],
 ];
 
 export function guessCategory(description: string, kind: TxKind): string | null {

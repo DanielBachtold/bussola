@@ -31,6 +31,7 @@ export function QuickAdd({ accounts, categories, rules, trips = [] }: { accounts
         accountId: effectiveAccount.id,
         categoryId: categoryId === null ? undefined : categoryId === '' ? null : categoryId,
         tripId: trip ? (tripOn ? trip.id : null) : undefined,
+        date: parsed.date,
       });
       if (res.ok) { setMsg({ ok: true, text: res.message ?? 'Registrado.' }); setText(''); setAccountId(''); setCategoryId(null); setTripChoice(null); }
       else setMsg({ ok: false, text: res.error ?? 'Erro.' });

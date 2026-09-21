@@ -7,7 +7,10 @@ import { getBudgetStatus, getSetting, listGroups } from '@/lib/budget';
 
 export const metadata = { title: 'Configurações' };
 
+import { requireSession } from '@/lib/session';
+
 export default async function ConfigPage() {
+  await requireSession();
   const [accounts, categories, rules, groups, status, income, threshold] = await Promise.all([
     listAccounts(pool, true), listCategories(), listRules(pool), listGroups(), getBudgetStatus(), getSetting('monthly_income'), getSetting('alert_threshold'),
   ]);
