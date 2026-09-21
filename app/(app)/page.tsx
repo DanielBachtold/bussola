@@ -27,7 +27,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   const month = monthParam(sp.m) ?? currentMonth();
   const prevMonth = addMonths(month, -1);
 
-  const [totals, prevTotals, byCat, avg, daily, series, recent, accounts, categories, insights, commitments, invoices, allocation, budget] = await Promise.all([
+  const [totals, , byCat, avg, daily, series, recent, accounts, categories, insights, commitments, invoices, allocation, budget] = await Promise.all([
     monthTotals(month), monthTotals(prevMonth), expensesByCategory(monthStart(month), monthEnd(month)), categoryAverages(month, 3),
     dailyCumulative(month), monthlySeries(12), listTransactions({ month, limit: 8 }), listAccounts(), listCategories(),
     computeInsights(month), futureCommitments(), invoiceSummaries(), latestAllocation(), getBudgetStatus(month),

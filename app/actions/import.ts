@@ -5,8 +5,9 @@ import { pool } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { parseOFX } from '@/lib/ofx';
 import { parseCSV } from '@/lib/csv';
-import { commitImport, previewImport, type ImportPreview } from '@/lib/reconcile';
+import { commitImport, previewImport, undoImport as undoImportRows, type ImportPreview } from '@/lib/reconcile';
 import type { ParsedStatement } from '@/lib/statement';
+import { listAccounts } from '@/lib/queries';
 
 export type PreviewState = {
   error?: string;
@@ -14,6 +15,8 @@ export type PreviewState = {
   statement?: ParsedStatement;
   filename?: string;
   invertSigns?: boolean;
+  /** o número da conta no arquivo bate com OUTRA conta cadastrada */
+  acctMatch?: { id: number; name: string } | null;
 };
 
 function parseFile(filename: string, text: string): ParsedStatement {
@@ -41,15 +44,45 @@ export async function previewUpload(_prev: PreviewState | undefined, formData: F
     const text = await readUpload(file);
     const statement = parseFile(file.name, text);
     if (!statement.lines.length) return { error: 'Nenhuma transação encontrada no arquivo.' };
-    const client = await pool.connect();
-    try {
-      const preview = await previewImport(accountId, statement, invertSigns, client);
-      return { preview, statement, filename: file.name, invertSigns };
-    } finally {
-      client.release();
-    }
+    return buildPreview(accountId, statement, file.name, invertSigns);
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao ler o arquivo.' };
+  }
+}
+
+async function buildPreview(accountId: number, statement: ParsedStatement, filename: string, invertSigns: boolean): Promise<PreviewState> {
+  const client = await pool.connect();
+  try {
+    const preview = await previewImport(accountId, statement, invertSigns, client);
+    let acctMatch: PreviewState['acctMatch'] = null;
+    if (statement.acctId) {
+      const other = (await listAccounts(client)).find((a) => a.ofx_acctid === statement.acctId && a.id !== accountId);
+      if (other) acctMatch = { id: other.id, name: other.name };
+    }
+    return { preview, statement, filename, invertSigns, acctMatch };
+  } finally {
+    client.release();
+  }
+}
+
+/** Refaz a prévia com outra conta ou sinal invertido, sem reenviar o arquivo. */
+export async function previewParsed(accountId: number, statement: ParsedStatement, filename: string, invertSigns: boolean): Promise<PreviewState> {
+  await requireSession();
+  try {
+    return await buildPreview(accountId, statement, filename, invertSigns);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao montar a prévia.' };
+  }
+}
+
+export async function undoImport(importId: number): Promise<{ ok: true; deleted: number; unmatched: number } | { ok: false; error: string }> {
+  await requireSession();
+  try {
+    const r = await undoImportRows(importId);
+    for (const p of ['/', '/transacoes', '/faturas', '/revisar', '/importar', '/viagens']) revalidatePath(p);
+    return { ok: true, ...r };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Erro ao desfazer.' };
   }
 }
 

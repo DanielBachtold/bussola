@@ -1,26 +1,35 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState, useTransition } from 'react';
-import { confirmImport, previewUpload, type PreviewState } from '@/app/actions/import';
+import { confirmImport, previewParsed, previewUpload, type PreviewState } from '@/app/actions/import';
 import { formatBRL } from '@/lib/money';
 import { formatDate } from '@/lib/dates';
 import type { Account } from '@/lib/types';
+import { useToast } from '@/components/Toast';
 
-export function ImportForm({ accounts }: { accounts: Account[] }) {
-  const [state, action, pending] = useActionState(previewUpload, undefined);
-  // o resultado só vale pra prévia que o gerou: uma nova prévia volta a mostrar a tabela
-  const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number; forPreview: unknown } | null>(null);
-  const [commitError, setCommitError] = useState<string | null>(null);
-  const [committing, start] = useTransition();
-  const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
+export function ImportForm({ accounts, defaultAccountId }: { accounts: Account[]; defaultAccountId?: number }) {
+  const toast = useToast();
+  const [uploaded, action, pending] = useActionState(previewUpload, undefined);
+  // prévia atual: a do upload, ou a refeita ao trocar conta/sinal sem reenviar o arquivo
+  const [redone, setRedone] = useState<PreviewState | null>(null);
+  const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number; accountId: number; periodEnd: string | null; forPreview: unknown } | null>(null);
+  const [busy, start] = useTransition();
+  const [accountId, setAccountId] = useState(String(defaultAccountId ?? accounts[0]?.id ?? ''));
 
-  const s: PreviewState | undefined = state;
+  const s: PreviewState | undefined = redone ?? uploaded;
   const shownResult = result && s?.preview && result.forPreview === s.preview ? result : null;
   const previewAccount = s?.preview ? accounts.find((a) => a.id === s.preview!.accountId) : undefined;
 
+  const redo = (nextAccountId: number, invert: boolean) => start(async () => {
+    if (!s?.statement || !s.filename) return;
+    const r = await previewParsed(nextAccountId, s.statement, s.filename, invert);
+    if (r.error) toast({ tone: 'bad', text: r.error }); else setRedone(r);
+  });
+
   return (
     <div className="flex flex-col gap-4">
-      <form action={action} className="card p-4 grid md:grid-cols-[1fr_auto] gap-3 items-end">
+      <form action={(fd) => { setRedone(null); setResult(null); action(fd); }} className="card p-4 grid md:grid-cols-[1fr_auto] gap-3 items-end">
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-[13px] text-ink-3">
             Conta
@@ -43,9 +52,13 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
       {s?.error ? <p className="text-sm text-bad">{s.error}</p> : null}
 
       {shownResult ? (
-        <div className="card p-4 border-l-4 border-l-good">
+        <div className="card p-4 border-l-4 border-l-good flex flex-col gap-2">
           <p className="font-semibold">Importação concluída</p>
-          <p className="text-[13px] text-ink-2">{shownResult.matched} lançamentos conciliados com o que você já tinha registrado, {shownResult.inserted} novos (veja em Revisar), {shownResult.skipped} já existiam.</p>
+          <p className="text-[13px] text-ink-2">{shownResult.matched} conciliados com o que você já tinha lançado, {shownResult.inserted} novos, {shownResult.skipped} já existiam.</p>
+          <div className="flex flex-wrap gap-2">
+            {shownResult.inserted ? <Link href="/revisar" className="btn btn-primary btn-sm">Revisar os {shownResult.inserted} novos</Link> : null}
+            <Link href={`/transacoes?m=${shownResult.periodEnd?.slice(0, 7) ?? ''}&a=${shownResult.accountId}`} className="btn btn-ghost btn-sm">Ver lançamentos</Link>
+          </div>
         </div>
       ) : null}
 
@@ -66,9 +79,26 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
               <span className="pill">{s.preview.counts.duplicate} repetidas</span>
             </div>
           </div>
+          {s.acctMatch ? (
+            <p className="text-[13px] text-warn flex flex-wrap items-center gap-2">
+              Pelo número da conta, este arquivo é de <strong>{s.acctMatch.name}</strong>.
+              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setAccountId(String(s.acctMatch!.id)); redo(s.acctMatch!.id, Boolean(s.invertSigns)); }}>Usar {s.acctMatch.name}</button>
+            </p>
+          ) : null}
           {s.statement?.accountKind !== 'unknown' && previewAccount && s.statement?.accountKind !== previewAccount.kind && previewAccount.kind !== 'investment' ? (
             <p className="text-[13px] text-warn">O arquivo parece ser de {s.statement?.accountKind === 'credit_card' ? 'cartão de crédito' : 'conta corrente'}, mas a conta escolhida é {previewAccount.kind === 'credit_card' ? 'cartão' : 'conta corrente'}. Confira antes de confirmar.</p>
           ) : null}
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+            <label className="flex items-center gap-1.5 text-ink-2">
+              Conta:
+              <select className="input !w-auto !py-1" value={s.preview.accountId} disabled={busy} onChange={(e) => redo(Number(e.target.value), Boolean(s.invertSigns))}>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-ink-2">
+              <input type="checkbox" checked={Boolean(s.invertSigns)} disabled={busy} onChange={(e) => redo(s.preview!.accountId, e.target.checked)} /> inverter sinais
+            </label>
+          </div>
           <div className="max-h-[420px] overflow-auto -mx-4 px-4">
             <table className="w-full text-[13px]">
               <thead className="text-ink-3 text-left sticky top-0 bg-surface">
@@ -79,7 +109,7 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
                   <tr key={i} className={l.outcome === 'duplicate' ? 'text-ink-3' : ''}>
                     <td className="py-1.5 whitespace-nowrap">{formatDate(l.date).slice(0, 5)}</td>
                     <td className="py-1.5 pr-2 max-w-[260px] truncate" title={l.description}>{l.description}</td>
-                    <td className={`py-1.5 text-right tabular whitespace-nowrap ${l.amount > 0 ? 'text-good' : ''}`}>{formatBRL(l.amount)}</td>
+                    <td className={`py-1.5 text-right whitespace-nowrap ${l.amount > 0 ? 'text-good' : ''}`}>{formatBRL(l.amount)}</td>
                     <td className="py-1.5 whitespace-nowrap">
                       {l.outcome === 'match' ? <span className="pill pill-good">= {l.matchDescription}</span>
                         : l.outcome === 'duplicate' ? <span className="pill">já importada</span>
@@ -92,17 +122,15 @@ export function ImportForm({ accounts }: { accounts: Account[] }) {
           </div>
           <button
             className="btn btn-primary self-end"
-            disabled={committing || (s.preview.counts.match + s.preview.counts.new === 0)}
+            disabled={busy || (s.preview.counts.match + s.preview.counts.new === 0)}
             onClick={() => start(async () => {
-              setCommitError(null);
               const r = await confirmImport(s.preview!.accountId, s.filename!, s.statement!, Boolean(s.invertSigns));
-              if (r.ok) setResult({ matched: r.matched, inserted: r.inserted, skipped: r.skipped, forPreview: s.preview });
-              else setCommitError(r.error);
+              if (r.ok) setResult({ matched: r.matched, inserted: r.inserted, skipped: r.skipped, accountId: s.preview!.accountId, periodEnd: s.statement?.periodEnd ?? null, forPreview: s.preview });
+              else toast({ tone: 'bad', text: r.error });
             })}
           >
-            {committing ? 'Importando...' : `Confirmar importação (${s.preview.counts.match + s.preview.counts.new})`}
+            {busy ? 'Importando...' : `Confirmar importação (${s.preview.counts.match + s.preview.counts.new})`}
           </button>
-          {commitError ? <p className="text-sm text-bad self-end">{commitError}</p> : null}
         </div>
       ) : null}
     </div>

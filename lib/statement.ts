@@ -14,4 +14,6 @@ export type ParsedStatement = {
   periodEnd: string | null;
   balance: number | null;
   balanceDate: string | null;
+  /** número da conta/cartão no arquivo (ACCTID): serve pra reconhecer a conta certa */
+  acctId?: string | null;
 };

@@ -38,6 +38,7 @@ export function parseOFX(raw: string): ParsedStatement {
     periodEnd: parseOfxDate(tag(body, 'DTEND')) ?? dates[dates.length - 1] ?? null,
     balance,
     balanceDate,
+    acctId: tag(body, 'ACCTID') || null,
   };
 }
 

@@ -98,6 +98,9 @@ const statements = [
     skipped INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reconciled_import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
+  `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS ofx_acctid TEXT`,
   `CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
     title TEXT,

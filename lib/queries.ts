@@ -501,6 +501,16 @@ export async function netWorthSeries(db: Queryable = pool): Promise<NetWorthPoin
 }
 
 /** Posição mais recente de cada ativo (cada um no seu último mês registrado). */
+/** Aportes (transferências que entraram) por conta de investimento num mês. */
+export async function contributionsByAccount(month: string, db: Queryable = pool): Promise<Record<number, number>> {
+  const { rows } = await db.query<{ account_id: number; total: number }>(
+    `SELECT t.account_id, SUM(t.amount)::numeric AS total FROM transactions t JOIN accounts a ON a.id = t.account_id
+     WHERE t.kind = 'transfer' AND a.kind = 'investment' AND t.date >= $1 AND t.date <= $2 GROUP BY 1`,
+    [monthStart(month), monthEnd(month)],
+  );
+  return Object.fromEntries(rows.map((r) => [r.account_id, r.total]));
+}
+
 export async function latestAllocation(db: Queryable = pool): Promise<Snapshot[]> {
   const { rows } = await db.query<Snapshot>(
     `SELECT * FROM (

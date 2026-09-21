@@ -69,7 +69,7 @@ export function TxList({ items, categories, trips, compact = false, hideStatus =
   );
 }
 
-function TxRow({ tx, categories, trips, compact, hideStatus, context, review, hideDate = false }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints; hideDate?: boolean }) {
+function TxRow({ tx, categories, trips, hideStatus, context, review, hideDate = false }: { tx: Transaction; categories: Category[]; trips?: Trip[]; compact?: boolean; hideStatus: boolean; context?: TxListContext; review?: ReviewHints; hideDate?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const amountClass = tx.kind === 'transfer' ? 'text-ink-3' : tx.kind === 'income' ? 'text-good' : 'text-ink';

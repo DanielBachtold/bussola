@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { currentMonth, formatMonth } from '@/lib/dates';
-import { formatBRL } from '@/lib/money';
+import { addMonths, currentMonth, formatMonth } from '@/lib/dates';
 import { latestAllocation, listAccounts, listSnapshots, netWorthSeries } from '@/lib/queries';
 import { NetWorthChart } from '@/components/charts/NetWorthChart';
 import { BarList } from '@/components/charts/BarList';
 import { StatTile } from '@/components/StatTile';
-import { SnapshotForm, SnapshotTable } from './SnapshotForm';
+import { SnapshotForm, SnapshotHistory } from './SnapshotForm';
+import { contributionsByAccount } from '@/lib/queries';
 
 export const metadata = { title: 'Investimentos' };
 
@@ -17,6 +17,9 @@ export default async function InvestimentosPage() {
   await requireSession();
   const accounts = (await listAccounts()).filter((a) => a.kind === 'investment');
   const [snapshots, series, allocation] = await Promise.all([listSnapshots(), netWorthSeries(), latestAllocation()]);
+  // aportes dos últimos 24 meses por conta, pra mostrar o rendimento ao salvar a posição
+  const months = Array.from({ length: 24 }, (_, i) => addMonths(currentMonth(), -i));
+  const contribByMonth = Object.fromEntries(await Promise.all(months.map(async (m) => [m, await contributionsByAccount(m)] as const)));
   const total = allocation.reduce((a, s) => a + s.balance, 0);
   const contributions = series.reduce((a, p) => a + p.contributions, 0);
   const first = series[0]?.total ?? 0;
@@ -78,15 +81,14 @@ export default async function InvestimentosPage() {
         </div>
         <div className="card p-4 flex flex-col gap-3">
           <h2 className="font-semibold">Registrar posição</h2>
-          <SnapshotForm accounts={accounts} defaultMonth={currentMonth()} knownAssets={[...new Set(snapshots.map((s) => s.asset))]} />
+          <SnapshotForm accounts={accounts} snapshots={snapshots} contributions={contribByMonth} />
         </div>
       </section>
 
       <section className="card p-4">
-        <h2 className="font-semibold mb-2">Histórico de posições</h2>
-        <SnapshotTable snapshots={snapshots} />
+        <h2 className="font-semibold mb-1">Histórico</h2>
+        <SnapshotHistory snapshots={snapshots} />
       </section>
-      <p className="text-[12px] text-ink-3">Total registrado: {formatBRL(total)}.</p>
     </div>
   );
 }

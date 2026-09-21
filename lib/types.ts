@@ -14,6 +14,7 @@ export type Account = {
   balance: number | null;
   balance_at: string | null;
   archived: boolean;
+  ofx_acctid: string | null;
 };
 
 export type Category = {

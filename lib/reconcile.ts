@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { withTransaction } from './db';
 import { addMonths, daysBetween, invoiceMonthFor, monthStart } from './dates';
 import { applyRules, listRules } from './rules';
-import { createTransaction, getAccount } from './queries';
+import { getAccount } from './queries';
 import type { ParsedStatement, StatementLine } from './statement';
 import type { TxKind } from './types';
 
@@ -43,7 +43,7 @@ function withSyntheticIds(lines: StatementLine[]): StatementLine[] {
 
 /**
  * Cruza o extrato com o que já existe na conta, sem gravar nada:
- * - fitid já importado  -> duplicate (ignora)
+ * - fitid já importado (ou repetido no arquivo) -> duplicate (ignora)
  * - lançamento manual pendente com mesmo valor e data próxima -> match
  * - nada parecido -> new (entra na fila de revisão)
  */
@@ -75,7 +75,6 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
   const out: PreviewLine[] = [];
   const seenInFile = new Set<string>();
   for (const line of lines) {
-    // já no banco, ou repetida dentro do próprio arquivo (o índice único derrubaria a importação)
     if (line.fitid && (known.has(line.fitid) || seenInFile.has(line.fitid))) {
       out.push({ ...line, outcome: 'duplicate', matchId: null, matchDescription: null, categoryId: null, categoryName: null, kind: 'expense' });
       continue;
@@ -114,52 +113,90 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
 
 export type ImportResult = { importId: number; matched: number; inserted: number; skipped: number };
 
-/** Grava o resultado do preview: concilia os matches e insere as linhas novas. */
+/**
+ * Grava o resultado do preview: concilia os matches e insere as linhas novas,
+ * tudo em poucas queries (um extrato de 300 linhas não pode virar 1.500 idas ao banco).
+ */
 export async function commitImport(accountId: number, filename: string, statement: ParsedStatement, invertSigns: boolean): Promise<ImportResult> {
   return withTransaction(async (db) => {
     const account = await getAccount(accountId, db);
     if (!account) throw new Error('Conta não encontrada.');
     const preview = await previewImport(accountId, statement, invertSigns, db);
-    let matched = 0, inserted = 0, skipped = 0;
-
-    for (const line of preview.lines) {
-      if (line.outcome === 'duplicate') { skipped++; continue; }
-      if (line.outcome === 'match' && line.matchId) {
-        await db.query(
-          `UPDATE transactions SET status = 'reconciled', fitid = COALESCE($2, fitid), statement_description = $3, updated_at = NOW() WHERE id = $1`,
-          [line.matchId, line.fitid, line.description],
-        );
-        matched++;
-        continue;
-      }
-      await createTransaction({
-        accountId,
-        date: line.date,
-        amount: line.amount,
-        description: line.description,
-        categoryId: line.categoryId,
-        kind: line.kind,
-        source: 'import',
-        status: 'imported',
-        // transferência reconhecida por regra não precisa de revisão
-        reviewed: line.kind === 'transfer',
-        fitid: line.fitid,
-        statementDescription: line.description,
-      }, db);
-      inserted++;
-    }
-
-    if (statement.balance !== null && account.kind !== 'credit_card') {
-      await db.query(`UPDATE accounts SET balance = $2, balance_at = $3 WHERE id = $1`, [accountId, statement.balance, statement.balanceDate ?? statement.periodEnd]);
-    }
-
     const dates = preview.lines.map((l) => l.date).sort();
-    const { rows } = await db.query<{ id: number }>(
-      `INSERT INTO imports (account_id, filename, period_start, period_end, total_lines, matched, inserted, skipped)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [accountId, filename, statement.periodStart ?? dates[0] ?? null, statement.periodEnd ?? dates[dates.length - 1] ?? null, preview.lines.length, matched, inserted, skipped],
+    const periodStart = statement.periodStart ?? dates[0] ?? null;
+    const periodEnd = statement.periodEnd ?? dates[dates.length - 1] ?? null;
+
+    const { rows: imp } = await db.query<{ id: number }>(
+      `INSERT INTO imports (account_id, filename, period_start, period_end, total_lines) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [accountId, filename, periodStart, periodEnd, preview.lines.length],
     );
-    return { importId: rows[0].id, matched, inserted, skipped };
+    const importId = imp[0].id;
+
+    // conciliações em um UPDATE só
+    const matches = preview.lines.filter((l) => l.outcome === 'match' && l.matchId);
+    if (matches.length) {
+      await db.query(
+        `UPDATE transactions t SET status = 'reconciled', fitid = COALESCE(v.fitid, t.fitid), statement_description = v.descr, reconciled_import_id = $1, updated_at = NOW()
+         FROM unnest($2::int[], $3::text[], $4::text[]) AS v(id, fitid, descr) WHERE t.id = v.id`,
+        [importId, matches.map((l) => l.matchId), matches.map((l) => l.fitid), matches.map((l) => l.description)],
+      );
+    }
+
+    // linhas novas: viagem ativa na data (fora categoria fixa) e fatura calculadas em memória
+    const news = preview.lines.filter((l) => l.outcome === 'new');
+    let inserted = 0;
+    if (news.length) {
+      const { rows: trips } = await db.query<{ id: number; start_date: string; end_date: string }>(
+        `SELECT id, start_date, end_date FROM trips WHERE end_date >= $1 AND start_date <= $2`, [periodStart ?? '1970-01-01', periodEnd ?? '2999-12-31'],
+      );
+      const { rows: fixedCats } = await db.query<{ id: number }>(`SELECT id FROM categories WHERE fixed = TRUE`);
+      const fixed = new Set(fixedCats.map((c) => c.id));
+      const col = <T,>(f: (l: PreviewLine) => T) => news.map(f);
+      const { rowCount } = await db.query(
+        `INSERT INTO transactions
+           (account_id, date, amount, description, category_id, kind, source, status, reviewed, fitid, statement_description, invoice_month, trip_id, import_id)
+         SELECT $1, v.date, v.amount, v.descr, v.category_id, v.kind, 'import', 'imported', v.reviewed, v.fitid, v.descr, v.invoice_month, v.trip_id, $2
+         FROM unnest($3::date[], $4::numeric[], $5::text[], $6::int[], $7::text[], $8::boolean[], $9::text[], $10::date[], $11::int[])
+           AS v(date, amount, descr, category_id, kind, reviewed, fitid, invoice_month, trip_id)`,
+        [
+          accountId, importId,
+          col((l) => l.date), col((l) => l.amount), col((l) => l.description), col((l) => l.categoryId), col((l) => l.kind),
+          // transferência reconhecida por regra não precisa de revisão
+          col((l) => l.kind === 'transfer'),
+          col((l) => l.fitid),
+          col((l) => (account.kind === 'credit_card' && account.closing_day ? monthStart(invoiceMonthFor(l.date, account.closing_day)) : null)),
+          col((l) => {
+            if (l.kind !== 'expense' || (l.categoryId && fixed.has(l.categoryId))) return null;
+            return trips.find((t) => t.start_date <= l.date && l.date <= t.end_date)?.id ?? null;
+          }),
+        ],
+      );
+      inserted = rowCount ?? 0;
+    }
+
+    const skipped = preview.counts.duplicate;
+    if (statement.balance !== null && account.kind !== 'credit_card') {
+      await db.query(`UPDATE accounts SET balance = $2, balance_at = $3 WHERE id = $1`, [accountId, statement.balance, statement.balanceDate ?? periodEnd]);
+    }
+    // guarda o número da conta do arquivo pra reconhecer o próximo
+    if (statement.acctId && !account.ofx_acctid) {
+      await db.query(`UPDATE accounts SET ofx_acctid = $2 WHERE id = $1 AND ofx_acctid IS NULL`, [accountId, statement.acctId]);
+    }
+    await db.query(`UPDATE imports SET matched = $2, inserted = $3, skipped = $4 WHERE id = $1`, [importId, matches.length, inserted, skipped]);
+    return { importId, matched: matches.length, inserted, skipped };
+  });
+}
+
+/** Desfaz uma importação: apaga o que ela inseriu e devolve os conciliados ao estado de pendente. */
+export async function undoImport(importId: number): Promise<{ deleted: number; unmatched: number }> {
+  return withTransaction(async (db) => {
+    const { rowCount: deleted } = await db.query(`DELETE FROM transactions WHERE import_id = $1`, [importId]);
+    const { rowCount: unmatched } = await db.query(
+      `UPDATE transactions SET status = 'pending', fitid = NULL, statement_description = NULL, reconciled_import_id = NULL, updated_at = NOW() WHERE reconciled_import_id = $1`,
+      [importId],
+    );
+    await db.query(`DELETE FROM imports WHERE id = $1`, [importId]);
+    return { deleted: deleted ?? 0, unmatched: unmatched ?? 0 };
   });
 }
 
