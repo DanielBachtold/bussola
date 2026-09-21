@@ -4,14 +4,15 @@ Sistema de finanças pessoais para quem quer saber onde o dinheiro está indo se
 
 **O que ele faz**
 
-- **Lançamento rápido, sem IA**: você escreve "almoço 42 crédito rico" ou "mercado 350 em 3x" e o sistema entende valor, conta, parcelas, data e categoria. Funciona no celular como app (PWA).
-- **Importação de extrato (OFX ou CSV)** com conciliação: o que você lançou durante o mês é casado com o extrato; o que veio no extrato e você esqueceu entra numa fila de revisão; o que você lançou e não apareceu no extrato também.
+- **Lançamento rápido, sem IA**: você escreve "almoço 42 crédito rico" ou "mercado 350 em 3x" e o sistema entende valor, conta, parcelas, data e categoria; chips do que você mais repete; a notificação do banco colada também vale. Funciona no celular como app (PWA), com atalho de "compartilhar" direto pra barra de lançar e `?q=...&ok=1` pra um Atalho da Siri.
+- **Importação de extrato (OFX ou CSV)** com conciliação: o que você lançou durante o mês é casado com o extrato; o que veio no extrato e você esqueceu entra numa fila de revisão (um toque no chip categoriza e ensina o padrão, os iguais vão junto); o que você lançou e não apareceu no extrato também. Dá pra desfazer a última importação, e o arquivo é reconhecido pelo número da conta.
 - **Cartão de crédito de verdade**: dia de fechamento e vencimento por cartão, compra cai na fatura certa, parcelas viram uma linha por fatura, pagamento de fatura é transferência (não gasto), e o painel mostra quanto já está comprometido nos meses seguintes.
 - **Categorização que aprende**: ao categorizar uma linha do extrato, o sistema salva o padrão e categoriza sozinho da próxima vez.
 - **Painel com gráficos e insights** calculados em código: projeção do mês, categoria que mais subiu, gastos recorrentes, orçamento estourado, fatura vencendo, taxa de poupança.
 - **Orçamento por percentual da renda**: grupos como Necessidades 40%, Lazer 15%, Educação 15%, Investimentos 30% (você define), cada categoria ligada a um grupo. Alerta dentro do app quando um grupo chega perto do limite e quando passa. Investimentos funciona como meta de aporte.
 - **Viagens**: um período com teto próprio. O que você gasta nas datas da viagem entra no teto sozinho (fora as categorias fixas, como aluguel e faculdade) e sai dos grupos do orçamento mensal; passagem e o que foi pago antes entram como pré-pago, fora do teto. Mostra quanto dá pra gastar por dia até a volta.
-- **Investimentos**: registro mensal de posição por ativo, evolução do patrimônio contra aportes acumulados, alocação por ativo e classe.
+- **Fixos previstos**: aluguel, financiamento, faculdade, assinaturas cadastrados uma vez. Viram lançamento no dia certo (pendente até o extrato confirmar), são descontados do "livre pra gastar" antes de cair e aparecem na seção "próximos 30 dias" do painel, junto com faturas, viagem e meta de aporte.
+- **Investimentos**: posição do mês pré-preenchida com os ativos do mês anterior (um salvar só), evolução do patrimônio contra aportes acumulados, alocação por ativo e classe.
 - **Chat**: funciona em dois modos. Sem chave de IA, entende um conjunto de perguntas frequentes sobre os números e sobre o sistema ("quanto gastei com uber em agosto", "qual a fatura aberta", "como funciona a conciliação") e responde direto do banco, sem custo. Com `ANTHROPIC_API_KEY`, usa o Claude com ferramentas: responde qualquer pergunta consultando seus dados (nunca inventa número) e registra lançamentos por conversa. A API da Anthropic é paga por uso.
 - **Tema claro, escuro ou automático**, salvo no navegador.
 

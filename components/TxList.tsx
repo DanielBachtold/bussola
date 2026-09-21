@@ -74,7 +74,7 @@ function TxRow({ tx, categories, trips, hideStatus, context, review, hideDate = 
   const [pending, start] = useTransition();
   const amountClass = tx.kind === 'transfer' ? 'text-ink-3' : tx.kind === 'income' ? 'text-good' : 'text-ink';
   // conciliado é o estado normal de quase tudo: não pede ação, não ganha selo
-  const status = hideStatus ? null : tx.reviewed === false ? 'revisar' : tx.status === 'pending' && tx.source !== 'import' ? 'sem extrato' : null;
+  const status = hideStatus ? null : tx.reviewed === false ? 'revisar' : tx.status === 'pending' && tx.source !== 'import' ? (tx.recurring_id ? 'fixo · sem extrato' : 'sem extrato') : null;
   const noCategory = tx.kind === 'expense' && !tx.category_id;
   const meta = [
     hideDate ? null : formatDateShort(tx.date),

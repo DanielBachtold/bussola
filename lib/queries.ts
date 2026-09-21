@@ -153,6 +153,7 @@ export type NewTransaction = {
   /** undefined = liga sozinho à viagem ativa na data (se a categoria não for fixa); null = não ligar */
   tripId?: number | null;
   tripExcluded?: boolean;
+  recurringId?: number | null;
 };
 
 /**
@@ -196,8 +197,8 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
     const { rows } = await db.query(
       `INSERT INTO transactions
         (account_id, date, amount, description, category_id, kind, source, status, reviewed, fitid, statement_description,
-         invoice_month, installment_group, installment_n, installment_total, notes, trip_id, trip_excluded)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+         invoice_month, installment_group, installment_n, installment_total, notes, trip_id, trip_excluded, recurring_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [
         input.accountId, date, amount, description, input.categoryId ?? null, kind, input.source,
         input.status ?? (input.source === 'import' ? 'imported' : 'pending'),
@@ -206,7 +207,7 @@ export async function createTransaction(input: NewTransaction, db: Queryable = p
         input.statementDescription ?? null,
         invoiceMonth, group, total > 1 ? i + 1 : null, total > 1 ? total : null, input.notes ?? null,
         // parcelas seguintes de uma compra na viagem continuam da viagem (o gasto foi lá)
-        tripId, input.tripExcluded ?? false,
+        tripId, input.tripExcluded ?? false, input.recurringId ?? null,
       ],
     );
     const tx = await getTransaction(rows[0].id, db);
@@ -275,7 +276,7 @@ export async function deleteInstallmentGroup(group: string, fromN: number, db: Q
 
 const TX_COLUMNS = [
   'id', 'account_id', 'date', 'amount', 'description', 'category_id', 'kind', 'source', 'status', 'reviewed', 'fitid', 'statement_description',
-  'invoice_month', 'installment_group', 'installment_n', 'installment_total', 'notes', 'trip_id', 'trip_excluded', 'created_at',
+  'invoice_month', 'installment_group', 'installment_n', 'installment_total', 'notes', 'trip_id', 'trip_excluded', 'recurring_id', 'created_at',
 ];
 
 /** Reinsere linhas apagadas com os mesmos ids (o "desfazer" da exclusão). */

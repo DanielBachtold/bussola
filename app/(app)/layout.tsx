@@ -4,11 +4,14 @@ import { Nav, type NavItem } from '@/components/Nav';
 import { logout } from '@/app/actions/auth';
 import { getBudgetStatus } from '@/lib/budget';
 import { tripAlerts } from '@/lib/trips';
+import { postRecurring } from '@/lib/recurring';
 import { TopAlerts } from '@/components/TopAlerts';
 import { ToastProvider } from '@/components/Toast';
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   await requireSession();
+  // fixos cujo dia chegou viram lançamento (idempotente)
+  await postRecurring().catch(() => 0);
   const { rows } = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM transactions WHERE reviewed = FALSE`);
   const pending = rows[0]?.n ?? 0;
   const [budget, trips] = await Promise.all([getBudgetStatus(), tripAlerts()]);

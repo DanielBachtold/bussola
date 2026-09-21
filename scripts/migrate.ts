@@ -101,6 +101,19 @@ const statements = [
   `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
   `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reconciled_import_id INT REFERENCES imports(id) ON DELETE SET NULL`,
   `ALTER TABLE accounts ADD COLUMN IF NOT EXISTS ofx_acctid TEXT`,
+  `CREATE TABLE IF NOT EXISTS recurring_rules (
+    id SERIAL PRIMARY KEY,
+    description TEXT NOT NULL,
+    amount NUMERIC(14,2) NOT NULL,
+    account_id INT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    category_id INT REFERENCES categories(id) ON DELETE SET NULL,
+    kind TEXT NOT NULL DEFAULT 'expense' CHECK (kind IN ('expense','income','transfer')),
+    day_of_month INT NOT NULL CHECK (day_of_month BETWEEN 1 AND 31),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_posted_month DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recurring_id INT REFERENCES recurring_rules(id) ON DELETE SET NULL`,
   `CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
     title TEXT,

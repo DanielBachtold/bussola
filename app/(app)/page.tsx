@@ -11,6 +11,7 @@ import { getBudgetStatus } from '@/lib/budget';
 import { pool } from '@/lib/db';
 import { BudgetBars } from '@/components/BudgetBars';
 import { tripsAround, tripStatus } from '@/lib/trips';
+import { daysUntil, pendingFixedThisMonth, upcoming } from '@/lib/recurring';
 import { TripCard } from '@/components/TripCard';
 import { StatTile } from '@/components/StatTile';
 import { MonthNav } from '@/components/MonthNav';
@@ -20,6 +21,8 @@ import { MonthlyChart } from '@/components/charts/MonthlyChart';
 import { TxList } from '@/components/TxList';
 
 import { requireSession } from '@/lib/session';
+
+const isCurrentMonth = (m: string) => m === currentMonth();
 
 export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   await requireSession();
@@ -34,6 +37,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   ]);
 
   const tripStatuses = await Promise.all((await tripsAround()).map((t) => tripStatus(t)));
+  const [next30, fixedPending] = await Promise.all([isCurrentMonth(month) ? upcoming(30) : Promise.resolve([]), isCurrentMonth(month) ? pendingFixedThisMonth() : Promise.resolve({ total: 0, items: [] })]);
   const avgTotal = [...avg.values()].reduce((a, b) => a + b, 0);
   const balance = totals.income - totals.expense;
   const checking = accounts.filter((a) => a.kind === 'checking' && a.balance !== null);
@@ -59,13 +63,15 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
   const limitSum = spendGroups.reduce((a, g) => a + g.limit, 0);
   const spentInGroups = spendGroups.reduce((a, g) => a + g.spent, 0) + budget.unassigned.spent;
   const hasBudget = limitSum > 0;
-  const free = hasBudget ? limitSum - spentInGroups : balance;
+  // fixos que ainda vão cair neste mês já estão "gastos" na prática
+  const free = (hasBudget ? limitSum - spentInGroups : balance) - fixedPending.total;
+  const fixedNote = fixedPending.total ? ` · ${formatBRL(fixedPending.total, { cents: false })} de fixos a cair` : '';
   const freeHint = !hasBudget
-    ? 'sem orçamento configurado'
+    ? `sem orçamento configurado${fixedNote}`
     : free < 0
-      ? `passou ${formatBRL(-free, { cents: false })} do teto de ${formatBRL(limitSum, { cents: false })}`
+      ? `passou ${formatBRL(-free, { cents: false })} do teto de ${formatBRL(limitSum, { cents: false })}${fixedNote}`
       : isCurrent && daysLeft > 0
-        ? `${formatBRL(free / daysLeft, { cents: false })}/dia por ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`
+        ? `${formatBRL(free / daysLeft, { cents: false })}/dia por ${daysLeft} dia${daysLeft > 1 ? 's' : ''}${fixedNote}`
         : `de um teto de ${formatBRL(limitSum, { cents: false })}`;
   const projected = isCurrent && todayDay() > 0 ? (totals.expense / todayDay()) * daysInMonth : null;
   const invoiceHint = openInvoices.length === 0
@@ -122,6 +128,28 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
             <Link href="/viagens" className="text-[13px] text-accent tap">ver</Link>
           </div>
           {tripStatuses.map((s) => <TripCard key={s.trip.id} s={s} />)}
+        </section>
+      ) : null}
+
+      {next30.length ? (
+        <section className="order-3 lg:order-none card p-4 flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="font-semibold">Próximos 30 dias</h2>
+            <span className="text-[13px] text-ink-2">{formatBRL(next30.reduce((a, u) => a + u.amount, 0), { cents: false })} saem</span>
+          </div>
+          <ul className="divide-y divide-border text-[13px]">
+            {next30.map((u, i) => {
+              const d = daysUntil(u.date);
+              return (
+                <li key={i} className="py-1.5 flex items-center gap-3">
+                  <span className="w-12 shrink-0 text-ink-3">{formatDate(u.date).slice(0, 5)}</span>
+                  <Link href={u.href} className="flex-1 min-w-0 truncate hover:underline">{u.label}</Link>
+                  <span className={`shrink-0 text-[11px] ${d <= 3 ? 'text-warn' : 'text-ink-3'}`}>{d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`}</span>
+                  <span className="shrink-0 font-medium">{formatBRL(u.amount, { cents: false })}</span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 

@@ -18,3 +18,6 @@
 - Tema: `public/theme-boot.js` (beforeInteractive) + `data-theme` no `<html>`; tokens escuros duplicados em `globals.css` (media query e data-theme).
 - Copy em português, primeira pessoa quando fizer sentido, sem travessão.
 - Dev local sem Postgres: `npm run db:local` (PGlite na porta 5433) + `.env.local` apontando pra ele.
+- Fixos (`lib/recurring.ts`): `postRecurring()` roda no layout a cada abertura, idempotente por `last_posted_month` (UPDATE condicional trava a regra antes de inserir). Lançamento nasce `pending` com `recurring_id`, concilia com o OFX como qualquer manual.
+- Toast: `useToast()` de `components/Toast.tsx`; exclusões devolvem as linhas apagadas e `undoRemove` reinsere com o mesmo id. Não usar `confirm()` pra excluir lançamento.
+- Importação em lote (`commitImport`): 1 INSERT com unnest + 1 UPDATE; `import_id`/`reconciled_import_id` permitem `undoImport`.

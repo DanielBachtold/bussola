@@ -73,6 +73,7 @@ export type Transaction = {
   trip_id: number | null;
   trip_excluded: boolean;
   trip_name: string | null;
+  recurring_id: number | null;
   account_name: string;
   account_kind: AccountKind;
   category_name: string | null;
@@ -99,4 +100,19 @@ export const TX_KIND_LABEL: Record<TxKind, string> = {
   expense: 'Gasto',
   income: 'Receita',
   transfer: 'Transferência',
+};
+
+export type RecurringRule = {
+  id: number;
+  description: string;
+  amount: number;
+  account_id: number;
+  category_id: number | null;
+  kind: TxKind;
+  day_of_month: number;
+  active: boolean;
+  last_posted_month: string | null;
+  account_name?: string;
+  category_name?: string | null;
+  category_icon?: string | null;
 };
