@@ -197,16 +197,13 @@ const defaultCategories: Array<[string, 'expense' | 'income', string]> = [
   ['Outras receitas', 'income', '➕'],
 ];
 
-// Padrões que, no extrato, indicam movimentação entre contas próprias e não gasto.
+// Padrões que, no extrato, indicam dinheiro mudando de lugar (não é gasto nem receita).
 const defaultTransferRules = [
-  'pagamento de fatura',
-  'pagamento recebido',
-  'pgto fatura',
-  'aplicacao',
-  'aplicação',
-  'resgate',
-  'transferencia entre contas',
-  'transferência entre contas',
+  'pagamento de fatura', 'pagamento recebido', 'pgto fatura', 'pagamento fatura',
+  'aplicacao', 'aplicação', 'resgate', 'resgatado', 'rdb', 'cdb',
+  'caixinha', 'dinheiro guardado', 'dinheiro resgatado', 'guardar dinheiro', 'reserva de emergencia',
+  'poupanca', 'poupança', 'tesouro direto', 'compra de acoes', 'compra de ações', 'venda de acoes', 'venda de ações',
+  'transferencia entre contas', 'transferência entre contas', 'transferencia para conta', 'aporte',
 ];
 
 // Grupos de orçamento por percentual da renda (o usuário ajusta em Configurações).

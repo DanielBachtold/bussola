@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useTransition } from 'react';
 import { archiveAccount, deleteCategory, deleteRule, restoreRule, saveAccount, saveCategory, saveRule } from '@/app/actions/config';
+import { saveMyNames } from '@/app/actions/transfers';
 import { useToast } from '@/components/Toast';
 import { formatBRL } from '@/lib/money';
 import { KIND_LABEL, type Account, type BudgetGroup, type Category, type Rule } from '@/lib/types';
@@ -152,6 +153,26 @@ function CategoryForm({ category, groups, close }: { category: Category | null; 
         <button type="button" className="btn btn-ghost" onClick={close}>Cancelar</button>
       </div>
     </form>
+  );
+}
+
+export function NamesPanel({ myNames }: { myNames: string }) {
+  const [state, action, pending] = useActionState(saveMyNames, undefined);
+  return (
+    <section className="card p-4 flex flex-col gap-2">
+      <div>
+        <h2 className="font-semibold">Meus nomes</h2>
+        <p className="text-[13px] text-ink-2">Pix e TED entre contas suas aparecem no extrato com o seu nome na contraparte. Diga como o banco escreve você (nome completo, variações, o CPF, o nome da empresa), separados por vírgula, e eu deixo de contar isso como gasto.</p>
+      </div>
+      <form action={action} className="flex flex-wrap gap-2 items-end text-[13px]">
+        <label className="flex flex-col gap-1 text-ink-3 flex-1 min-w-[220px]">Nomes e documentos
+          <input name="my_names" className="input" defaultValue={myNames} placeholder="Daniel Bächtold, Daniel B, 123.456.789-00" />
+        </label>
+        <button className="btn btn-primary" disabled={pending}>Salvar</button>
+        {state?.error ? <p className="w-full text-bad">{state.error}</p> : null}
+        {state?.ok ? <p className="w-full text-good">{state.message}</p> : null}
+      </form>
+    </section>
   );
 }
 

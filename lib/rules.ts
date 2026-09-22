@@ -71,3 +71,27 @@ export async function upsertRule(db: Queryable, pattern: string, categoryId: num
     await db.query(`INSERT INTO category_rules (pattern, category_id, kind) VALUES ($1, $2, $3)`, [pattern, categoryId, kind]);
   }
 }
+
+/**
+ * Pix e TED para a própria pessoa: o nome dela aparece na contraparte.
+ * Os nomes ficam em Configurações ("Meus nomes"), porque o banco escreve de
+ * jeitos diferentes (nome completo, abreviado, nome da empresa, CPF).
+ */
+export function isSelfTransfer(description: string, myNames: string[]): boolean {
+  if (!myNames.length) return false;
+  const text = normalizeText(description);
+  // só vale pra linha que já é uma transferência bancária, não pra compra
+  if (!/\b(pix|ted|doc|transferencia|transferência)\b/.test(text)) return false;
+  return myNames.some((raw) => {
+    const name = normalizeText(raw);
+    if (name.length < 3) return false;
+    // CPF: compara só os dígitos
+    const digits = name.replace(/\D/g, '');
+    if (digits.length >= 6) return description.replace(/\D/g, '').includes(digits);
+    return text.includes(name);
+  });
+}
+
+export function parseNames(raw: string | null | undefined): string[] {
+  return (raw ?? '').split(/[,;\n]/).map((s) => s.trim()).filter((s) => s.length >= 3);
+}

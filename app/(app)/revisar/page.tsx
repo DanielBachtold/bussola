@@ -6,6 +6,10 @@ import { listTrips } from '@/lib/trips';
 import { listRules } from '@/lib/rules';
 import { pool } from '@/lib/db';
 import { MarkAllButton } from './MarkAll';
+import { TransferCheck } from './TransferCheck';
+import { counterpartySuggestions, transferCandidates } from '@/lib/transfers';
+import { WhoAmI } from './WhoAmI';
+import { getSetting } from '@/lib/budget';
 
 export const metadata = { title: 'Revisar' };
 
@@ -15,7 +19,13 @@ import { postRecurring } from '@/lib/recurring';
 export default async function RevisarPage() {
   await requireSession();
   await postRecurring().catch(() => 0);
-  const [{ unreviewed, unmatched, total }, categories, trips, rules, topByAccount] = await Promise.all([pendingReview(), listCategories(), listTrips(), listRules(pool), topCategoriesByAccount(3)]);
+  const [{ unreviewed, unmatched, total }, categories, trips, rules, topByAccount, candidates, dismissedRaw] = await Promise.all([
+    pendingReview(), listCategories(), listTrips(), listRules(pool), topCategoriesByAccount(3), transferCandidates(12), getSetting('transfer_dismissed'),
+  ]);
+  const myNames = await getSetting('my_names');
+  const nameSuggestions = myNames ? [] : await counterpartySuggestions();
+  const dismissed: string[] = dismissedRaw ? JSON.parse(dismissedRaw) : [];
+  const transfers = candidates.filter((c) => !dismissed.includes(c.key));
   const sum = unreviewed.filter((t) => t.kind === 'expense').reduce((a, t) => a + Math.abs(t.amount), 0);
 
   return (
@@ -24,6 +34,9 @@ export default async function RevisarPage() {
         <h1 className="text-[22px] font-semibold tracking-tight">Revisar</h1>
         <p className="text-sm text-ink-2 hidden md:block">O que veio no extrato e você não tinha registrado, e o que você registrou e não apareceu no extrato.</p>
       </header>
+
+      <WhoAmI suggestions={nameSuggestions} />
+      <TransferCheck candidates={transfers} />
 
       <section className="card p-4 flex flex-col gap-2">
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">

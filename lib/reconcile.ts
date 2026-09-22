@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { withTransaction } from './db';
 import { addMonths, daysBetween, invoiceMonthFor, monthStart } from './dates';
-import { applyRules, listRules } from './rules';
+import { applyRules, isSelfTransfer, listRules, parseNames } from './rules';
+import { getSetting } from './budget';
 import { getAccount } from './queries';
 import type { ParsedStatement, StatementLine } from './statement';
 import type { TxKind } from './types';
@@ -51,6 +52,7 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
   const account = await getAccount(accountId, db);
   if (!account) throw new Error('Conta não encontrada.');
   const rules = await listRules(db);
+  const myNames = parseNames(await getSetting('my_names', db));
 
   const lines = withSyntheticIds(statement.lines.map((l) => ({ ...l, amount: invertSigns ? -l.amount : l.amount })));
   const dates = lines.map((l) => l.date).sort();
@@ -96,7 +98,8 @@ export async function previewImport(accountId: number, statement: ParsedStatemen
       continue;
     }
     const applied = applyRules(line.description, rules);
-    const kind: TxKind = applied.kind ?? (line.amount < 0 ? 'expense' : 'income');
+    // Pix/TED em que a contraparte é o próprio usuário: dinheiro trocando de bolso
+    const kind: TxKind = applied.kind ?? (isSelfTransfer(line.description, myNames) ? 'transfer' : line.amount < 0 ? 'expense' : 'income');
     out.push({ ...line, outcome: 'new', matchId: null, matchDescription: null, categoryId: applied.category_id, categoryName: catName(applied.category_id), kind });
   }
 
