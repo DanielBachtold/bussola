@@ -80,6 +80,50 @@ export async function computeInsights(month: string = currentMonth(), db: Querya
     });
   }
 
+  // cobrança repetida: mesma descrição e mesmo valor duas vezes em poucos dias
+  const { rows: dupes } = await db.query<{ description: string; amount: number; n: number; dates: string[] }>(
+    `SELECT t.description, ABS(t.amount)::numeric AS amount, COUNT(*)::int AS n, array_agg(to_char(t.date, 'DD/MM') ORDER BY t.date) AS dates
+     FROM transactions t
+     WHERE t.kind = 'expense' AND t.date >= $1 AND t.date <= $2 AND t.installment_group IS NULL
+     GROUP BY lower(t.description), t.description, ABS(t.amount)
+     HAVING COUNT(*) > 1 AND MAX(t.date) - MIN(t.date) <= 3 AND ABS(t.amount) >= 20
+     ORDER BY ABS(t.amount) * COUNT(*) DESC LIMIT 1`,
+    [start, end],
+  );
+  if (dupes[0]) {
+    out.push({
+      tone: 'warning',
+      title: `${dupes[0].description} apareceu ${dupes[0].n} vezes`,
+      detail: `${formatBRL(dupes[0].amount)} em ${dupes[0].dates.join(' e ')}. Pode ser cobrança repetida; confira no extrato.`,
+    });
+  }
+
+  // assinatura que subiu de preço: mesma descrição mensal com valor maior que antes
+  const { rows: hikes } = await db.query<{ description: string; atual: number; antes: number }>(
+    `WITH mensais AS (
+       SELECT lower(description) AS key, MAX(description) AS description,
+              MAX(ABS(amount)) FILTER (WHERE date >= $1 AND date <= $2)::numeric AS atual,
+              AVG(ABS(amount)) FILTER (WHERE date < $1 AND date >= $3)::numeric AS antes,
+              COALESCE(STDDEV_POP(ABS(amount)) FILTER (WHERE date < $1 AND date >= $3), 0)::numeric AS variacao,
+              COUNT(DISTINCT date_trunc('month', date)) AS meses
+       FROM transactions WHERE kind = 'expense' AND installment_group IS NULL AND date >= $3 AND date <= $2
+       GROUP BY 1
+     )
+     SELECT description, atual, antes FROM mensais
+     -- só o que tinha preço fixo antes (assinatura), não gasto que varia todo mês
+     WHERE meses >= 3 AND atual IS NOT NULL AND antes IS NOT NULL AND variacao <= antes * 0.02
+       AND atual > antes * 1.05 AND atual - antes >= 3
+     ORDER BY atual - antes DESC LIMIT 1`,
+    [start, end, monthStart(addMonths(month, -4))],
+  );
+  if (hikes[0]) {
+    out.push({
+      tone: 'warning',
+      title: `${hikes[0].description} subiu de preço`,
+      detail: `${formatBRL(hikes[0].atual)} agora, contra ${formatBRL(hikes[0].antes)} nos meses anteriores.`,
+    });
+  }
+
   // recorrências: mesma descrição em 3 dos últimos 4 meses (assinaturas)
   const { rows: recurring } = await db.query<{ description: string; months: number; avg: number }>(
     `SELECT lower(description) AS description, COUNT(DISTINCT date_trunc('month', date))::int AS months, ABS(AVG(amount))::numeric AS avg

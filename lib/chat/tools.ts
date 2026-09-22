@@ -2,7 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { currentMonth, invoiceDates, monthEnd, monthStart, openInvoiceMonth, todayISO } from '@/lib/dates';
 import { computeInsights } from '@/lib/insights';
-import { getBudgetStatus } from '@/lib/budget';
+import { getBudgetStatus, listGroups, setSetting } from '@/lib/budget';
+import { pool } from '@/lib/db';
 import { listTrips, tripStatus } from '@/lib/trips';
 import {
   categoryAverages, createTransaction, expensesByCategory, findAccountByName, findCategoryByName, futureCommitments,
@@ -92,6 +93,34 @@ export const toolDefinitions: Anthropic.Beta.BetaTool[] = [
     description: 'Patrimônio investido: posição mais recente por ativo e conta, evolução mensal e aportes registrados.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
     strict: true,
+  },
+  {
+    name: 'criar_viagem',
+    description: 'Cria uma viagem com período e teto de gastos. Use quando o usuário disser que vai viajar e quiser um limite pro período. Gastos já lançados nas datas entram no teto.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string' },
+        inicio: { type: 'string', description: 'YYYY-MM-DD' },
+        fim: { type: 'string', description: 'YYYY-MM-DD' },
+        teto: { type: 'number', description: 'limite de gastos durante a viagem, em reais' },
+      },
+      required: ['nome', 'inicio', 'fim'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'definir_orcamento',
+    description: 'Ajusta a renda mensal base e/ou o percentual de um grupo do orçamento (necessidades, lazer, educação, investimentos).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        renda_mensal: { type: 'number' },
+        grupo: { type: 'string', description: 'nome do grupo (parcial)' },
+        percentual: { type: 'number' },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: 'registrar_lancamento',
@@ -192,6 +221,33 @@ export async function runTool(name: string, rawInput: unknown): Promise<{ ok: tr
           evolucao: series,
         } };
       }
+      case 'criar_viagem': {
+        const p = z.object({ nome: z.string().min(1), inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), teto: z.number().nonnegative().optional() }).parse(rawInput);
+        if (p.fim < p.inicio) return { ok: false, error: 'A volta não pode ser antes da ida.' };
+        const { rows } = await pool.query<{ id: number }>(`INSERT INTO trips (name, start_date, end_date, budget) VALUES ($1,$2,$3,$4) RETURNING id`, [p.nome, p.inicio, p.fim, p.teto ?? 0]);
+        const { rowCount } = await pool.query(
+          `UPDATE transactions t SET trip_id = $1
+           WHERE t.kind = 'expense' AND t.trip_id IS NULL AND t.date BETWEEN $2 AND $3
+             AND t.recurring_id IS NULL AND (t.installment_group IS NULL OR t.installment_n = 1)
+             AND (t.category_id IS NULL OR t.category_id NOT IN (SELECT id FROM categories WHERE fixed = TRUE))`,
+          [rows[0].id, p.inicio, p.fim],
+        );
+        return { ok: true, result: { viagem: p.nome, id: rows[0].id, teto: p.teto ?? 0, gastos_ja_vinculados: rowCount ?? 0 } };
+      }
+      case 'definir_orcamento': {
+        const p = z.object({ renda_mensal: z.number().positive().optional(), grupo: z.string().optional(), percentual: z.number().min(0).max(100).optional() }).parse(rawInput ?? {});
+        if (p.renda_mensal) await setSetting('monthly_income', String(p.renda_mensal));
+        let grupo: string | null = null;
+        if (p.grupo && p.percentual !== undefined) {
+          const groups = await listGroups();
+          const target = groups.find((g) => g.name.toLowerCase().includes(p.grupo!.toLowerCase()));
+          if (!target) return { ok: false, error: `Grupo não encontrado. Existem: ${groups.map((g) => g.name).join(', ')}.` };
+          await pool.query(`UPDATE budget_groups SET percent = $2 WHERE id = $1`, [target.id, p.percentual]);
+          grupo = target.name;
+        }
+        const status = await getBudgetStatus(currentMonth());
+        return { ok: true, result: { renda: status.base, grupo_alterado: grupo, soma_percentuais: status.totalPercent, grupos: status.groups.map((g) => ({ nome: g.group.name, percentual: g.group.percent, limite: g.limit })) } };
+      }
       case 'registrar_lancamento': {
         const p = RegistrarSchema.parse(rawInput);
         const account = await findAccountByName(p.conta);
@@ -221,6 +277,7 @@ Como o sistema funciona:
 - "Transferência" é dinheiro entre contas do próprio usuário (pagamento de fatura, aporte em investimento): nunca é gasto nem receita.
 - O usuário registra gastos no dia a dia e importa o extrato na virada do mês; o sistema concilia os dois.
 - Viagens têm teto próprio: gasto nas datas da viagem (fora categorias fixas) entra no teto e sai dos grupos do orçamento mensal; pré-pago (passagem etc.) fica fora do teto. Use a ferramenta viagens.
+- Você pode criar viagem com teto e ajustar renda/percentual do orçamento quando o usuário pedir (ferramentas criar_viagem e definir_orcamento). Confirme o que fez em uma frase.
 - Há um orçamento por percentual da renda (grupos como necessidades, lazer, educação, investimentos). Use a ferramenta orcamento para perguntas sobre limite, meta ou "posso gastar".
 
 Contas cadastradas:

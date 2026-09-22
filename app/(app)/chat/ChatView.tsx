@@ -14,6 +14,8 @@ const TOOL_LABEL: Record<string, string> = {
   investimentos: 'lendo a posição de investimentos',
   orcamento: 'conferindo o orçamento',
   viagens: 'olhando as viagens',
+  criar_viagem: 'criando a viagem',
+  definir_orcamento: 'ajustando o orçamento',
   registrar_lancamento: 'registrando',
 };
 
@@ -26,6 +28,7 @@ const SUGGESTIONS: Record<'ai' | 'local', string[]> = {
   ],
   local: [
     'Como está meu mês?',
+    'Vou viajar de 15/10 a 07/11 com limite de 1000',
     'Quanto gastei com alimentação?',
     'Onde gastei mais nos últimos 3 meses?',
     'Qual a fatura aberta e quando vence?',

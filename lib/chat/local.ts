@@ -7,6 +7,7 @@ import { quickParse, signedAmount } from '@/lib/quickparse';
 import { listRules } from '@/lib/rules';
 import { createTransaction, listAccounts as listAllAccounts, listCategories as listAllCategories } from '@/lib/queries';
 import { pool } from '@/lib/db';
+import { tryCommand } from './commands';
 import { normalizeText } from '@/lib/rules';
 import {
   categoryAverages, expensesByCategory, futureCommitments, invoiceSummaries, latestAllocation, listAccounts, listCategories,
@@ -70,6 +71,10 @@ export async function answerLocally(question: string): Promise<string> {
   const period = parsePeriod(n);
   const hasMoneyIntent = /\b(viagem|viagens|quanto|gastei|gasto|gastos|paguei|recebi|receita|sobrou|resultado|saldo|patrimonio|investid|fatura|parcela|maior|top|ranking|pendente|revisar|lista|mostra|quais|onde|resumo|insight|como esta|como ta|como anda)\b/.test(n);
 
+  // comandos que mexem no sistema: criar viagem com teto, renda, percentual de grupo
+  const command = await tryCommand(question, n);
+  if (command) return command.text;
+
   // "lança almoço 42 no crédito", "registra uber 23,50", "anota 120 jantar rico"
   const launch = /^(lanca|lance|lancar|registra|registrar|anota|anotar|adiciona|adicionar)\b\s*(.*)$/.exec(n);
   if (launch && /\d/.test(launch[2]) && !/\b(quanto|quantos|mais de|menos de|mes passado|semana|ultimos?)\b/.test(n)) {
@@ -98,7 +103,8 @@ export async function answerLocally(question: string): Promise<string> {
   // ---- viagens ----
   const tripsForIntent = /viagem|viagens|viajar|viajando/.test(n) ? await listTrips() : [];
   const namedTrip = tripsForIntent.find((t) => new RegExp(`\\b${normalizeText(t.name)}\\b`).test(n)) ?? null;
-  if (/viagem|viagens|viajar|viajando/.test(n) && (namedTrip || !/\b(quanto|gastei|gasto|gastos|paguei)\b/.test(n))) {
+  const asksTrip = /\b(posso gastar|por dia|teto|limite|quanto falta|quanto sobra|como (esta|ta|vai))\b/.test(n);
+  if (/viagem|viagens|viajar|viajando/.test(n) && (namedTrip || asksTrip || !/\b(quanto|gastei|gasto|gastos|paguei)\b/.test(n))) {
     const trips = tripsForIntent;
     if (!trips.length) return 'Nenhuma viagem cadastrada. Em Viagens, crie uma com nome, ida, volta e teto de gastos. O que você lançar nas datas dela (fora as categorias fixas) entra no teto automaticamente.';
     const named = namedTrip;
@@ -268,6 +274,8 @@ const HELP = `Sem chave de IA, eu respondo perguntas diretas sobre os seus núme
 • como está a viagem
 • como está meu mês
 • lança almoço 42 crédito rico (registra o gasto)
+• vou viajar de 15/10 a 07/11 com limite de 1000 (cria a viagem com teto)
+• minha renda mensal é 9500 · lazer com 15% (ajusta o orçamento)
 
 E sobre o sistema: como importar extrato, como funciona a fatura, como categorizar, o que é transferência, como instalar no celular.`;
 
