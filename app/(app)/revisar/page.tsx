@@ -32,7 +32,7 @@ export default async function RevisarPage() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Revisar</h1>
-        <p className="text-sm text-ink-2 hidden md:block">O que veio no extrato e você não tinha registrado, e o que você registrou e não apareceu no extrato.</p>
+        <p className="text-sm text-ink-2 hidden md:block">O que o extrato trouxe e ainda precisa de um toque seu.</p>
       </header>
 
       <WhoAmI suggestions={nameSuggestions} />
@@ -50,7 +50,7 @@ export default async function RevisarPage() {
 
       <section className="card p-4 flex flex-col gap-2">
         <h2 className="font-semibold">Você registrou, não apareceu no extrato <span className="pill ml-1">{unmatched.length}</span></h2>
-        <p className="text-[13px] text-ink-3">Pode ser erro de digitação, compra em outra conta, ou algo que ainda vai cair. Confirme ou corrija.</p>
+        <p className="text-[13px] text-ink-3 hidden md:block">Erro de digitação, compra em outra conta, ou algo que ainda vai cair.</p>
         <UnmatchedList items={unmatched} categories={categories} />
       </section>
     </div>

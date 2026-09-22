@@ -120,8 +120,10 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         <StatTile label="Faturas abertas" value={openTotal} tone={checking.length && checkingTotal - openTotal < 0 ? 'bad' : undefined} hint={invoiceHint} />
       </section>
 
+      {/* viagem e próximos 30 dias dividem a faixa no desktop */}
+      <div className={`${tripStatuses.some((s) => s.phase === 'active') ? 'order-2' : 'order-9'} lg:order-none grid grid-cols-1 ${tripStatuses.length && next30.length ? 'lg:grid-cols-2' : ''} gap-4`}>
       {tripStatuses.length ? (
-        <section className={`${tripStatuses.some((s) => s.phase === 'active') ? 'order-2' : 'order-9'} lg:order-none card p-4 flex flex-col gap-4`}>
+        <section className="card p-4 md:p-5 flex flex-col gap-4">
           <div className="flex items-baseline justify-between">
             <h2 className="font-semibold">Viagem</h2>
             <Link href="/viagens" className="text-[13px] text-accent tap">ver</Link>
@@ -131,7 +133,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
       ) : null}
 
       {next30.length ? (
-        <section className="order-3 lg:order-none card p-4 flex flex-col gap-2">
+        <section className="card p-4 md:p-5 flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="font-semibold">Próximos 30 dias</h2>
             <span className="text-[13px] text-ink-2">{formatBRL(next30.reduce((a, u) => a + u.amount, 0), { cents: false })} saem</span>
@@ -151,6 +153,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
           </ul>
         </section>
       ) : null}
+      </div>
 
       <section className="order-3 lg:hidden card p-4 flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
@@ -160,7 +163,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
         <TxList items={recent.slice(0, 5)} categories={categories} />
       </section>
 
-      <section id="orcamento" className="order-4 lg:order-none card p-4 flex flex-col gap-3 scroll-mt-4">
+      <section id="orcamento" className="order-4 lg:order-none card p-4 md:p-5 flex flex-col gap-3 scroll-mt-4">
         <div className="flex items-baseline justify-between">
           <h2 className="font-semibold">Orçamento <span className="text-ink-3 font-normal text-[13px] hidden sm:inline">por percentual da renda</span></h2>
           <Link href="/config#orcamento" className="text-[13px] text-accent tap">configurar</Link>
@@ -190,7 +193,7 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
       ) : null}
 
       <section className="order-6 lg:order-none grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="card p-4 lg:col-span-2 flex flex-col gap-3 min-w-0">
+        <div className="card p-4 md:p-5 lg:col-span-2 flex flex-col gap-3 min-w-0">
           <div className="flex items-baseline justify-between">
             <h2 className="font-semibold">Por categoria</h2>
             <Link href={`/transacoes?m=${month}`} className="text-[13px] text-accent tap">ver tudo</Link>
@@ -198,19 +201,19 @@ export default async function Dashboard({ searchParams }: PageProps<'/'>) {
           <div className="lg:hidden"><BarList items={barItemsMobile} markerLabel="média dos últimos 3 meses" /></div>
           <div className="hidden lg:block"><BarList items={barItems} markerLabel="média dos últimos 3 meses" /></div>
         </div>
-        <div className="card p-4 lg:col-span-3 flex flex-col gap-3 min-w-0">
+        <div className="card p-4 md:p-5 lg:col-span-3 flex flex-col gap-3 min-w-0">
           <h2 className="font-semibold">Ritmo do mês <span className="text-ink-3 font-normal text-[13px]">gasto acumulado por dia</span></h2>
           <CumulativeChart data={daily} currentLabel={formatMonth(month)} previousLabel={formatMonth(prevMonth)} ceiling={hasBudget ? limitSum : null} />
         </div>
       </section>
 
       <section className="order-7 lg:order-none grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="card p-4 lg:col-span-3 flex flex-col gap-3 min-w-0">
+        <div className="card p-4 md:p-5 lg:col-span-3 flex flex-col gap-3 min-w-0">
           <h2 className="font-semibold"><span className="md:hidden">Últimos 6 meses</span><span className="hidden md:inline">Últimos 12 meses</span></h2>
           <div className="md:hidden"><MonthlyChart data={series.slice(-6)} /></div>
           <div className="hidden md:block"><MonthlyChart data={series} /></div>
         </div>
-        <div className="card p-4 lg:col-span-2 flex flex-col gap-3 min-w-0">
+        <div className="card p-4 md:p-5 lg:col-span-2 flex flex-col gap-3 min-w-0">
           <h2 className="font-semibold">Saldos</h2>
           <dl className="flex flex-col divide-y divide-border text-[14px]">
             {checking.map((c) => (

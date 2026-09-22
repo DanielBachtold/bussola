@@ -10,7 +10,7 @@ import {
 import { ThemeToggle } from './ThemeToggle';
 
 export type NavIcon = 'painel' | 'lancar' | 'chat' | 'lancamentos' | 'revisar' | 'faturas' | 'categorias' | 'viagens' | 'investimentos' | 'importar' | 'config';
-export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number; mobile?: boolean };
+export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number; mobile?: boolean; group?: 'dia' | 'acompanhar' };
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   painel: LayoutDashboard, lancar: Plus, chat: MessageSquare, lancamentos: List, revisar: ClipboardCheck,
@@ -34,10 +34,12 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
           <Logo />
           <span className="font-semibold text-[17px] tracking-tight">Bússola</span>
         </Link>
-        {items.filter((it) => it.href !== '/config').map((it) => {
+        {items.filter((it) => it.href !== '/config').map((it, i, list) => {
           const Icon = ICONS[it.icon];
           const active = isActive(it.href);
+          const newGroup = i > 0 && it.group !== list[i - 1].group;
           return (
+            <div key={`g${it.href}`} className={newGroup ? 'mt-3 pt-3 border-t border-border' : ''}>
             <Link
               key={it.href}
               href={it.href}
@@ -48,6 +50,7 @@ export function Nav({ items, onLogout }: { items: NavItem[]; onLogout: () => Pro
               <span className="flex-1">{it.label}</span>
               {it.badge ? <span className="pill pill-warn">{it.badge}</span> : null}
             </Link>
+            </div>
           );
         })}
         <div className="mt-auto flex items-center gap-1">

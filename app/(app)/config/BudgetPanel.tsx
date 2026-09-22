@@ -16,7 +16,7 @@ export function BudgetPanel({ status, groups, categories, monthlyIncome, thresho
     <section id="orcamento" className="card p-4 flex flex-col gap-4 scroll-mt-4">
       <div>
         <h2 className="font-semibold">Orçamento por percentual</h2>
-        <p className="text-[13px] text-ink-2">Defina quanto da renda vai pra cada grupo. O sistema avisa dentro do app quando um grupo chega perto do limite e quando passa.</p>
+        <p className="text-[13px] text-ink-2">Quanto da renda vai pra cada grupo. Eu aviso quando um deles chega perto do limite.</p>
       </div>
 
       <form action={settingsAction} className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[13px] items-end">

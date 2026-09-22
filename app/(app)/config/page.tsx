@@ -21,7 +21,7 @@ export default async function ConfigPage() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Configurações</h1>
-        <p className="text-sm text-ink-2">Contas, cartões, categorias e as regras que o sistema aprendeu.</p>
+        <p className="text-sm text-ink-2">Contas, orçamento, fixos, categorias e regras.</p>
       </header>
       <AccountsPanel accounts={accounts} />
       <NamesPanel myNames={myNames} />

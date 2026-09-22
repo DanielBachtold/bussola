@@ -26,7 +26,7 @@ export default async function ViagensPage({ searchParams }: PageProps<'/viagens'
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Viagens</h1>
-          <p className="text-sm text-ink-2">Um período com teto próprio. O que você gastar nas datas da viagem entra aqui e sai dos grupos do orçamento mensal; as contas fixas seguem no mês.</p>
+          <p className="text-sm text-ink-2">Um período com teto próprio: o gasto das datas da viagem entra aqui e sai do orçamento do mês.</p>
         </div>
         {trips.length ? <Link href="/viagens?nova=1" className="btn btn-primary btn-sm">Nova viagem</Link> : null}
       </header>

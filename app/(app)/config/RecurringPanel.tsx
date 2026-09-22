@@ -16,7 +16,7 @@ export function RecurringPanel({ rules, accounts, categories }: { rules: Recurri
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Fixos do mês</h2>
-          <p className="text-[13px] text-ink-2">Aluguel, financiamento, faculdade, assinaturas. Eu lanço no dia certo (fica &ldquo;sem extrato&rdquo; até o banco confirmar) e desconto do livre pra gastar antes de cair.</p>
+          <p className="text-[13px] text-ink-2">Aluguel, financiamento, faculdade, assinaturas. Eu lanço no dia certo e desconto do livre pra gastar antes de cair.</p>
         </div>
         <button className="btn btn-primary btn-sm shrink-0" onClick={() => setEditing('new')}>Novo fixo</button>
       </div>

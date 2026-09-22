@@ -44,7 +44,7 @@ export default async function InvestimentosPage() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Investimentos</h1>
-        <p className="text-sm text-ink-2">Uma vez por mês, registre o saldo de cada ativo. Os aportes o sistema já conhece (transferências pra conta de investimento), então a rentabilidade sai daí.</p>
+        <p className="text-sm text-ink-2">Uma vez por mês, registre o saldo de cada ativo. O rendimento eu calculo descontando os aportes.</p>
       </header>
 
       {!accounts.length ? (

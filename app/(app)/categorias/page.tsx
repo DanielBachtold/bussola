@@ -31,7 +31,7 @@ export default async function CategoriasPage() {
     <div className="flex flex-col gap-4">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Categorias</h1>
-        <p className="text-sm text-ink-2">Gasto mês a mês nos últimos 6 meses. A cor de fundo é a intensidade; a seta compara {formatMonth(currentMonth())} com a média dos anteriores.</p>
+        <p className="text-sm text-ink-2">Gasto mês a mês. A seta compara {formatMonth(currentMonth())} com a média dos meses anteriores.</p>
       </header>
       {!cats.length ? <p className="card p-4 text-sm text-ink-3">Nenhum gasto ainda.</p> : (
         <div className="card overflow-x-auto">

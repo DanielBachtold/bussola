@@ -22,17 +22,17 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
 
   // mobile: true = barra inferior (Lançar vira o botão central); o resto vai pro "Mais"
   const items: NavItem[] = [
-    { href: '/', label: 'Painel', icon: 'painel', mobile: true },
-    { href: '/transacoes', label: 'Lançamentos', icon: 'lancamentos', mobile: true },
-    { href: '/lancar', label: 'Lançar', icon: 'lancar', mobile: true },
-    { href: '/revisar', label: 'Revisar', icon: 'revisar', badge: pending, mobile: true },
-    { href: '/faturas', label: 'Faturas', icon: 'faturas' },
-    { href: '/categorias', label: 'Categorias', icon: 'categorias' },
-    { href: '/chat', label: 'Chat', icon: 'chat' },
-    { href: '/viagens', label: 'Viagens', icon: 'viagens' },
-    { href: '/investimentos', label: 'Investimentos', icon: 'investimentos' },
-    { href: '/importar', label: 'Importar extrato', icon: 'importar' },
-    { href: '/config', label: 'Configurações', icon: 'config' },
+    { href: '/', label: 'Painel', icon: 'painel', mobile: true, group: 'dia' },
+    { href: '/transacoes', label: 'Lançamentos', icon: 'lancamentos', mobile: true, group: 'dia' },
+    { href: '/lancar', label: 'Lançar', icon: 'lancar', mobile: true, group: 'dia' },
+    { href: '/revisar', label: 'Revisar', icon: 'revisar', badge: pending, mobile: true, group: 'dia' },
+    { href: '/faturas', label: 'Faturas', icon: 'faturas', group: 'acompanhar' },
+    { href: '/categorias', label: 'Categorias', icon: 'categorias', group: 'acompanhar' },
+    { href: '/viagens', label: 'Viagens', icon: 'viagens', group: 'acompanhar' },
+    { href: '/investimentos', label: 'Investimentos', icon: 'investimentos', group: 'acompanhar' },
+    { href: '/chat', label: 'Chat', icon: 'chat', group: 'acompanhar' },
+    { href: '/importar', label: 'Importar extrato', icon: 'importar', group: 'acompanhar' },
+    { href: '/config', label: 'Configurações', icon: 'config', group: 'acompanhar' },
   ];
 
   return (

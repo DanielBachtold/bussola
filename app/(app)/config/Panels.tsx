@@ -184,7 +184,7 @@ export function RulesPanel({ rules, categories }: { rules: Rule[]; categories: C
     <section className="card p-4 flex flex-col gap-3">
       <div>
         <h2 className="font-semibold">Regras de categorização</h2>
-        <p className="text-[13px] text-ink-2">Se a descrição do extrato contém o padrão, o lançamento recebe a categoria (ou vira transferência). O sistema cria regras sozinho quando você categoriza com &ldquo;aprender esse padrão&rdquo;.</p>
+        <p className="text-[13px] text-ink-2">Padrão na descrição do extrato vira categoria (ou transferência). Eu crio regras sozinho quando você categoriza revisando.</p>
       </div>
       <form action={action} className="flex flex-wrap gap-2 items-end text-[13px]">
         <label className="flex flex-col gap-1 text-ink-3 flex-1 min-w-[160px]">Padrão
