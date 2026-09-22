@@ -21,7 +21,7 @@ export default async function ImportarPage() {
     <div className="flex flex-col gap-5 max-w-3xl">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Importar extrato</h1>
-        <p className="text-sm text-ink-2">OFX é o formato ideal (todo banco exporta, e cada linha vem com identificador único, então reimportar não duplica). CSV também funciona.</p>
+        <p className="text-sm text-ink-2">OFX é o formato ideal: cada linha vem com identificador único, então reimportar o mesmo arquivo não duplica nada. CSV e PDF também funcionam (no PDF eu leio o texto e monto as linhas, então confira a prévia antes de confirmar).</p>
       </header>
       <ImportForm accounts={accounts} defaultAccountId={history[0]?.account_id} />
       {history.length ? (

@@ -7,7 +7,7 @@ export type StatementLine = {
 };
 
 export type ParsedStatement = {
-  format: 'ofx' | 'csv';
+  format: 'ofx' | 'csv' | 'pdf';
   accountKind: 'checking' | 'credit_card' | 'unknown';
   lines: StatementLine[];
   periodStart: string | null;
@@ -16,4 +16,6 @@ export type ParsedStatement = {
   balanceDate: string | null;
   /** número da conta/cartão no arquivo (ACCTID): serve pra reconhecer a conta certa */
   acctId?: string | null;
+  /** origem do texto, quando não veio de arquivo (colar) */
+  source?: string | null;
 };

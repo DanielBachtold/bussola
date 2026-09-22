@@ -5,7 +5,7 @@ Sistema de finanças pessoais para quem quer saber onde o dinheiro está indo se
 **O que ele faz**
 
 - **Lançamento rápido, sem IA**: você escreve "almoço 42 crédito rico" ou "mercado 350 em 3x" e o sistema entende valor, conta, parcelas, data e categoria; chips do que você mais repete; a notificação do banco colada também vale. Funciona no celular como app (PWA), com atalho de "compartilhar" direto pra barra de lançar e `?q=...&ok=1` pra um Atalho da Siri.
-- **Importação de extrato (OFX ou CSV)** com conciliação: o que você lançou durante o mês é casado com o extrato; o que veio no extrato e você esqueceu entra numa fila de revisão (um toque no chip categoriza e ensina o padrão, os iguais vão junto); o que você lançou e não apareceu no extrato também. Dá pra desfazer a última importação, e o arquivo é reconhecido pelo número da conta.
+- **Importação de extrato (OFX, CSV ou PDF)** com conciliação: o que você lançou durante o mês é casado com o extrato; o que veio no extrato e você esqueceu entra numa fila de revisão (um toque no chip categoriza e ensina o padrão, os iguais vão junto); o que você lançou e não apareceu no extrato também. Dá pra desfazer a última importação, e o arquivo é reconhecido pelo número da conta.
 - **Cartão de crédito de verdade**: dia de fechamento e vencimento por cartão, compra cai na fatura certa, parcelas viram uma linha por fatura, pagamento de fatura é transferência (não gasto), e o painel mostra quanto já está comprometido nos meses seguintes.
 - **Categorização que aprende**: ao categorizar uma linha do extrato, o sistema salva o padrão e categoriza sozinho da próxima vez.
 - **Painel com gráficos e insights** calculados em código: projeção do mês, categoria que mais subiu, gastos recorrentes, orçamento estourado, fatura vencendo, taxa de poupança.
@@ -74,6 +74,7 @@ app/actions/      server actions (auth, transações, config, importação, inve
 app/api/chat/     rota de streaming do chat (só com ANTHROPIC_API_KEY)
 lib/ofx.ts        parser de OFX 1.x e 2.x tolerante a banco brasileiro
 lib/csv.ts        parser de CSV com detecção de colunas
+lib/pdf.ts        leitura de extrato/fatura em PDF (heurística sobre o texto)
 lib/reconcile.ts  prévia e gravação da importação, conciliação por valor + data
 lib/quickparse.ts interpretador da barra rápida (sem IA)
 lib/insights.ts   insights calculados

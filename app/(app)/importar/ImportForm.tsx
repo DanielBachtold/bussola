@@ -11,6 +11,8 @@ import { useToast } from '@/components/Toast';
 export function ImportForm({ accounts, defaultAccountId }: { accounts: Account[]; defaultAccountId?: number }) {
   const toast = useToast();
   const [uploaded, action, pending] = useActionState(previewUpload, undefined);
+  const [picked, setPicked] = useState<{ name: string; size: number } | null>(null);
+  const [pasting, setPasting] = useState(false);
   // prévia atual: a do upload, ou a refeita ao trocar conta/sinal sem reenviar o arquivo
   const [redone, setRedone] = useState<PreviewState | null>(null);
   const [result, setResult] = useState<{ matched: number; inserted: number; skipped: number; accountId: number; periodEnd: string | null; forPreview: unknown } | null>(null);
@@ -29,7 +31,7 @@ export function ImportForm({ accounts, defaultAccountId }: { accounts: Account[]
 
   return (
     <div className="flex flex-col gap-4">
-      <form action={(fd) => { setRedone(null); setResult(null); action(fd); }} className="card p-4 grid md:grid-cols-[1fr_auto] gap-3 items-end">
+      <form action={(fd) => { setRedone(null); setResult(null); setPicked(null); action(fd); }} className="card p-4 grid md:grid-cols-[1fr_auto] gap-3 items-end">
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-[13px] text-ink-3">
             Conta
@@ -37,14 +39,25 @@ export function ImportForm({ accounts, defaultAccountId }: { accounts: Account[]
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[13px] text-ink-3">
-            Arquivo (.ofx ou .csv)
-            <input name="file" type="file" accept=".ofx,.qfx,.csv,.txt" className="input !py-2" required />
+          <label className={`flex flex-col gap-1 text-[13px] text-ink-3 ${pasting ? 'hidden' : ''}`}>
+            Arquivo do banco
+            {/* sem filtro de extensão: o iPhone esconde .ofx quando a gente restringe */}
+            <input name="file" type="file" className="input !py-2" onChange={(e) => { const f = e.target.files?.[0]; setPicked(f ? { name: f.name, size: f.size } : null); }} />
+            <span className="text-[12px]">OFX é o melhor (não duplica ao reimportar). CSV e PDF também servem.{picked ? ` Escolhido: ${picked.name}, ${(picked.size / 1024).toFixed(0)} KB.` : ''}</span>
           </label>
+          {pasting ? (
+            <label className="flex flex-col gap-1 text-[13px] text-ink-3 sm:col-span-2">
+              Cole o conteúdo do OFX ou do CSV
+              <textarea name="pasted" rows={6} className="input font-mono !text-[12px]" placeholder="Abra o arquivo, selecione tudo, copie e cole aqui." />
+            </label>
+          ) : null}
           <label className="flex items-center gap-2 text-[13px] text-ink-2 sm:col-span-2">
             <input type="checkbox" name="invert" defaultChecked={false} />
             Inverter sinais (use se o arquivo mostra compras como valor positivo, comum em CSV de cartão)
           </label>
+          <button type="button" className="text-[13px] text-accent w-fit sm:col-span-2" onClick={() => setPasting((v) => !v)}>
+            {pasting ? 'Voltar a enviar o arquivo' : 'O celular não deixa escolher o arquivo? Colar o texto'}
+          </button>
         </div>
         <button className="btn btn-primary" disabled={pending}>{pending ? 'Lendo...' : 'Pré-visualizar'}</button>
       </form>
@@ -71,6 +84,7 @@ export function ImportForm({ accounts, defaultAccountId }: { accounts: Account[]
                 {s.statement?.periodStart ? `${formatDate(s.statement.periodStart)} a ${formatDate(s.statement.periodEnd ?? s.statement.periodStart)} · ` : ''}
                 {s.preview.lines.length} linhas
                 {s.statement?.balance != null ? ` · saldo ${formatBRL(s.statement.balance)}` : ''}
+                {s.statement?.format === 'pdf' ? ' · lido de PDF, confira as linhas' : ''}
               </p>
             </div>
             <div className="flex gap-2 text-[12px]">

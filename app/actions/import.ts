@@ -5,6 +5,7 @@ import { pool } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { parseOFX } from '@/lib/ofx';
 import { parseCSV } from '@/lib/csv';
+import { parsePDF } from '@/lib/pdf';
 import { commitImport, previewImport, undoImport as undoImportRows, type ImportPreview } from '@/lib/reconcile';
 import type { ParsedStatement } from '@/lib/statement';
 import { listAccounts } from '@/lib/queries';
@@ -19,30 +20,44 @@ export type PreviewState = {
   acctMatch?: { id: number; name: string } | null;
 };
 
-function parseFile(filename: string, text: string): ParsedStatement {
+/**
+ * Descobre o formato pelo conteúdo, não pela extensão: o celular às vezes
+ * renomeia o arquivo, e tem banco que entrega OFX com nome .txt.
+ */
+async function parseAnything(filename: string, bytes: Uint8Array): Promise<ParsedStatement> {
+  const head = new TextDecoder('latin1').decode(bytes.slice(0, 2048));
   const lower = filename.toLowerCase();
-  if (lower.endsWith('.ofx') || lower.endsWith('.qfx') || /<OFX>/i.test(text)) return parseOFX(text);
-  if (lower.endsWith('.csv') || lower.endsWith('.txt')) return parseCSV(text);
-  throw new Error('Formato não suportado. Envie OFX (preferido) ou CSV.');
+  if (head.startsWith('%PDF') || lower.endsWith('.pdf')) return parsePDF(bytes, filename);
+  if (/<OFX>|OFXHEADER/i.test(head) || /\.(ofx|qfx|ofc)$/.test(lower)) return parseOFX(decodeText(bytes));
+  if (/\.(csv|txt|tsv)$/.test(lower) || /[;,\t]/.test(head.split('\n')[0] ?? '')) return parseCSV(decodeText(bytes));
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) throw new Error('Esse arquivo é um ZIP (ou xlsx). Descompacte, ou exporte em OFX, CSV ou PDF.');
+  throw new Error('Não reconheci o formato. Exporte o extrato em OFX (melhor), CSV ou PDF.');
 }
 
-async function readUpload(file: File): Promise<string> {
-  const buf = Buffer.from(await file.arrayBuffer());
-  // bancos brasileiros ainda exportam OFX em latin1 com frequência
-  const utf8 = buf.toString('utf8');
-  return utf8.includes('�') ? buf.toString('latin1') : utf8;
+/** Bancos brasileiros ainda exportam OFX/CSV em latin1 com frequência. */
+function decodeText(bytes: Uint8Array): string {
+  const utf8 = new TextDecoder('utf-8').decode(bytes);
+  return utf8.includes('\uFFFD') ? new TextDecoder('latin1').decode(bytes) : utf8;
 }
 
 export async function previewUpload(_prev: PreviewState | undefined, formData: FormData): Promise<PreviewState> {
   await requireSession();
   try {
     const file = formData.get('file');
-    if (!(file instanceof File) || file.size === 0) return { error: 'Escolha um arquivo.' };
+    const pasted = String(formData.get('pasted') ?? '').trim();
     const accountId = Number(formData.get('account_id'));
     if (!accountId) return { error: 'Escolha a conta.' };
     const invertSigns = formData.get('invert') === 'on';
-    const text = await readUpload(file);
-    const statement = parseFile(file.name, text);
+
+    if (pasted) {
+      const statement = /<OFX>|OFXHEADER/i.test(pasted.slice(0, 2048)) ? parseOFX(pasted) : parseCSV(pasted);
+      if (!statement.lines.length) return { error: 'Não achei lançamentos no texto colado.' };
+      return buildPreview(accountId, statement, 'texto colado', invertSigns);
+    }
+    if (!(file instanceof File) || file.size === 0) return { error: 'Escolha um arquivo ou cole o texto do extrato.' };
+    if (file.size > 9 * 1024 * 1024) return { error: `O arquivo tem ${(file.size / 1024 / 1024).toFixed(1)} MB; o limite é 9 MB. Exporte um período menor.` };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const statement = await parseAnything(file.name, bytes);
     if (!statement.lines.length) return { error: 'Nenhuma transação encontrada no arquivo.' };
     return buildPreview(accountId, statement, file.name, invertSigns);
   } catch (err) {

@@ -21,3 +21,5 @@
 - Fixos (`lib/recurring.ts`): `postRecurring()` roda no layout a cada abertura, idempotente por `last_posted_month` (UPDATE condicional trava a regra antes de inserir). Lançamento nasce `pending` com `recurring_id`, concilia com o OFX como qualquer manual.
 - Toast: `useToast()` de `components/Toast.tsx`; exclusões devolvem as linhas apagadas e `undoRemove` reinsere com o mesmo id. Não usar `confirm()` pra excluir lançamento.
 - Importação em lote (`commitImport`): 1 INSERT com unnest + 1 UPDATE; `import_id`/`reconciled_import_id` permitem `undoImport`.
+- Importar aceita OFX, CSV e PDF; o formato é detectado pelo CONTEÚDO (`parseAnything` em app/actions/import.ts), não pela extensão. O input de arquivo NÃO pode ter `accept` (o iOS esconde .ofx). Limite de upload: `serverActions.bodySizeLimit` em next.config.ts.
+- PDF (`lib/pdf.ts`) é heurístico: sem FITID, usa o id sintético da conciliação. Fatura = gasto positivo no papel vira negativo; extrato com coluna de saldo usa o penúltimo número da linha.
